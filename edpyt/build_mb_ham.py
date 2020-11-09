@@ -1,9 +1,9 @@
 import numpy as np
 from numba import njit
+from collections import namedtuple
 
 # Sparse matrix format
 from scipy.sparse import (
-    coo_matrix,
     csr_matrix
 )
 
@@ -38,6 +38,7 @@ Conventions:
     d : sector size
     dup : sector number of up spin states (all possible permutations of nup in n)
     dwn : sectot number of down spin states (all possible permutations of ndw in n)
+
 """
 
 
@@ -143,8 +144,6 @@ def build_mb_ham(H, V, states_up, states_dw):
             shape=sp_mat_dw.shape)
     )
 
-
-from collections import namedtuple
 
 # scipy::sparse::coo_matrix might set index_type to np.int32.
 _coo_matrix = namedtuple('coo_matrix',['data','row','col','shape'])

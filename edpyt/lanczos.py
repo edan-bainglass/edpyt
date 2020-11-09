@@ -1,5 +1,5 @@
 import numpy as np
-from numpy.linalg import qr, solve
+from numpy.linalg import qr, build_espace
 from scipy.linalg import norm
 
 def NSI(A, tol=1E-14, maxiter=5000):

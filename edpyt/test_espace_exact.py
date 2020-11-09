@@ -1,7 +1,7 @@
 import numpy as np
 
-from exact import (
-    full_diag,
+from espace import (
+    build_espace,
 )
 
 """Hubbard dimer.
@@ -42,8 +42,8 @@ eigvals = {key:np.array(eig) for key, eig in eigvals.items()}
 EG0 = 2.*ed+0.5*(U-np.sqrt(U**2.+16.*t**2.))
 
 
-def test_full_diag():
-    espace, egs = full_diag(H, V)
+def test_solve():
+    espace, egs = build_espace(H, V)
 
     # Eigenspace
     for (nup, ndw), sct in espace.items():

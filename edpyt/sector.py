@@ -9,7 +9,8 @@ from shared import (
     unsiged_dt
 )
 
-@njit
+
+@njit('void(uint32[:])')
 def permutations(states):
     """Generate all permutations of initial bit pattern.
 
@@ -22,14 +23,15 @@ def permutations(states):
         x = v + (unsiged_dt((v^x)/u)>>2)
         states[i] = x
 
-
+# @njit('int64(int64,int64)')
 def get_sector_dim(n, p):
     """Get sector dimension.
 
     """
+    # return binom(n, p)
     return int(binom(n, p))
 
-
+# @njit('uint32[:](int64,int64)')
 def generate_states(n, p):
     """Generate states in sector.
 

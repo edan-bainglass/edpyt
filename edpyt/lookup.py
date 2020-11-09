@@ -37,12 +37,20 @@ def binrep(i, n, format="array"):
         raise ValueError(
             "Invalid format type {}.".format(format))
 
+
 @njit('UniTuple(int64,2)(int64,int64,int64)')
 def get_spin_indices(i, dup, dwn):
-    """Return spin indices in state i = iup + dup*idw.
+    """Return spin indices from state i = iup + dup*idw.
 
     """
     iup = i%dup
     idw = i//dup
-    # idw, iup = np.unravel_index(i, (dwn, dup))
     return iup, idw
+
+
+@njit('int64(int64,int64,int64)')
+def get_state_index(iup, idw, dup):
+    """Return state index from spin indices i = iup + dup*idw.
+
+    """
+    return iup + idw * dup

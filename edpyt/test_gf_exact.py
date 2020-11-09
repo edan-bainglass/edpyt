@@ -1,6 +1,6 @@
 import numpy as np
 
-from exact import (
+from gf_exact import (
     build_gf_exact,
 )
 
