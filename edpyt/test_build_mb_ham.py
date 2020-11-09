@@ -4,6 +4,10 @@ from build_mb_ham import (
     build_mb_ham
 )
 
+from sector import (
+    generate_states
+)
+
 
 t12 = -1.
 t21 = -1.
@@ -22,14 +26,19 @@ V = np.array([
     [0,U2]
 ])
 
+# https://physics.stackexchange.com/questions/160194/numerical-study-of-hubbard-model-and-spin-charge-separation-effect
+
 def test_build_mb_ham():
 
     # sz = 0 sector
 
+    n = H.shape[0]
     nup = 1
     ndw = 1
 
-    i_vals, iup_mat, idw_mat = build_mb_ham(H, V, nup, ndw)
+    states_up = generate_states(n, nup)
+    states_dw = generate_states(n, ndw)
+    i_vals, iup_mat, idw_mat = build_mb_ham(H, V, states_up, states_dw)
 
     dup = iup_mat.shape[0]
     dwn = idw_mat.shape[0]
@@ -61,12 +70,13 @@ def test_build_mb_ham():
     #   s3      0    |  -t12 |   -t12  | 2*e1+U1
 
     expected = np.array([
-        [2*e2+U2,-t21,-t21,0],
-        [-t12,e1+e2,0,-t21],
-        [-t12,0,e1+e2,-t21],
-        [0,-t12,-t12,2*e1+U1]
+        [2*e2+U2,t21,t21,0],
+        [t12,e1+e2,0,t21],
+        [t12,0,e1+e2,t21],
+        [0,t12,t12,2*e1+U1]
     ])
 
+    np.savetxt('mb_ham.txt', mb_ham, fmt='%.2f')
     assert np.allclose(mb_ham, expected)
 
 
@@ -75,7 +85,9 @@ def test_build_mb_ham():
     nup = 2
     ndw = 0
 
-    i_vals, iup_mat, idw_mat = build_mb_ham(H, V, nup, ndw)
+    states_up = generate_states(n, nup)
+    states_dw = generate_states(n, ndw)
+    i_vals, iup_mat, idw_mat = build_mb_ham(H, V, states_up, states_dw)
 
     dup = iup_mat.shape[0]
     dwn = idw_mat.shape[0]
@@ -106,7 +118,9 @@ def test_build_mb_ham():
     nup = 0
     ndw = 2
 
-    i_vals, iup_mat, idw_mat = build_mb_ham(H, V, nup, ndw)
+    states_up = generate_states(n, nup)
+    states_dw = generate_states(n, ndw)
+    i_vals, iup_mat, idw_mat = build_mb_ham(H, V, states_up, states_dw)
 
     dup = iup_mat.shape[0]
     dwn = idw_mat.shape[0]

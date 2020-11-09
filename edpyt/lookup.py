@@ -7,6 +7,17 @@ from shared import (
 )
 
 
+@njit()
+def count_bits(s, n):
+    """Count the number of '1' bits in a state s.
+
+    """
+    bits = 0
+    for i in range(n):
+        bits += (s>>i)&unsiged_dt(1)
+    return bits
+
+
 def binrep(i, n, format="array"):
     """Return binary representation in vector format.
 
@@ -26,10 +37,12 @@ def binrep(i, n, format="array"):
         raise ValueError(
             "Invalid format type {}.".format(format))
 
-
+@njit('UniTuple(int64,2)(int64,int64,int64)')
 def get_spin_indices(i, dup, dwn):
     """Return spin indices in state i = iup + dup*idw.
 
     """
-    idw, iup = np.unravel_index(i, (dwn, dup))
+    iup = i%dup
+    idw = i//dup
+    # idw, iup = np.unravel_index(i, (dwn, dup))
     return iup, idw
