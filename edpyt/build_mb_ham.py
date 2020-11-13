@@ -19,7 +19,8 @@ from lookup import (
 )
 
 from shared import (
-    unsiged_dt
+    unsiged_dt,
+    params
 )
 
 from operators import (
@@ -67,7 +68,7 @@ def add_hoppings(ix_s, states, T_data, T_r, T_c, count, val, row, col):
     return count
 
 
-def build_mb_ham(H, V, states_up, states_dw, hfmode=False):
+def build_mb_ham(H, V, states_up, states_dw):
     """Build sparse Hamiltonian of the sector.
 
     Args:
@@ -96,15 +97,18 @@ def build_mb_ham(H, V, states_up, states_dw, hfmode=False):
         sdw = states_dw[idw]
 
         # Singly-occupied : \sum_{l,sigma} n^+_{l,sigma}
-        onsite_energy = np.sum(H.diagonal() * binrep(sup, n))
-        onsite_energy += np.sum(H.diagonal() * binrep(sdw, n))
+        bup = binrep(sup, n)
+        bdw = binrep(sdw, n)
+        onsite_energy = np.sum(H.diagonal() * (bup+bdw))
+        if params.get('mu',None) is not None:
+            mu = params['mu']
+            onsite_energy -= np.sum(mu * (bup+bdw))
 
         # Doubly-occupied : \sum_{l,sigma} n^+_{l,sigma} n_{l,sigma'}
         onsite_int = np.sum(V.diagonal() * binrep(sup&sdw, n))
-        if hfmode:
-            onsite_int -= 0.5 * np.sum(V.diagonal() * binrep(sup&sdw, n))
-            onsite_int += 0.25 * np.sum(V.diagonal())
-
+        # Hartree term : \sum_{l,sigma} U(n^+_{l,sigma}-1/2)
+        if params['hfmode']:
+            onsite_int -= 0.5 * np.sum(V.diagonal() * (bup+bdw-0.5*np.ones_like(bup)))
 
         vec_diag[i] = onsite_energy + onsite_int
 

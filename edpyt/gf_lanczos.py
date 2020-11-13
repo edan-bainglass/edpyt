@@ -1,5 +1,5 @@
 import numpy as np
-from numba import njit
+from numba import njit, jit
 from multiprocessing import Pool
 
 from lookup import (
@@ -34,10 +34,10 @@ from espace import (
 
 def continued_fraction(a, b):
     sz = a.size
-    # @njit('complex64(float64,float64,int64)')
+    # @njit
     def inner(e, eta, n=sz):
-        if n==0:
-            return 0
+        if n==1:
+            return b[sz-n] / (e + 1.j*eta - a[sz-n])
         else:
             return b[sz-n] / (e + 1.j*eta - a[sz-n] - inner(e, eta, n-1))
     return inner
@@ -51,11 +51,12 @@ class Gf:
         self.funcs.append(
             continued_fraction(a, b)
         )
-    def __call__(self, z):
-        pool = Pool(4)
-        rets = [pool.appy(f, args=(z,)) for f in self.funcs]
-        out = np.sum([r.get() for r in rets], axis=0)
-        pool.close()
+    def __call__(self, e, eta):
+        # pool = Pool(4)
+        # rets = [pool.apply(f, args=(e, eta,)) for f in self.funcs]
+        # out = np.sum([r.get() for r in rets], axis=0)
+        # pool.close()
+        out = np.sum([f(e, eta) for f in self.funcs], axis=0)
         return out / self.Z
 
 
@@ -148,7 +149,7 @@ def build_gf_lanczos(H, V, espace, beta, mu=0.):
                 aJ, bJ = build_sl_tridiag(matvec, v0)
                 bJ **= 2
                 bJ[0] *= exponent
-                gf.add(aJ, bJ)
+                gf.add(-aJ, bJ)
 
     # Partition function (Z)
     Z = sum(np.exp(-beta*(sct.eigvals-mu*(nup+ndw))).sum() for

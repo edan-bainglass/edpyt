@@ -15,18 +15,20 @@ U = 1.
 beta = 0.
 mu = ed + U/2.
 
-H = np.array([
+H_ = lambda ed, t: np.array([
     [ed,-t],
     [-t,ed]
 ])
 
-V = np.array([
+V_ = lambda U: np.array([
     [U,0],
     [0,U]
 ])
 
 def test_build_gf_exact():
     # Test against atomic limit
+    H = H_(ed,t)
+    V = V_(U)
     gf = build_gf_exact(H, V, beta=beta, mu=mu)
 
     eta = 1e-3
@@ -36,36 +38,24 @@ def test_build_gf_exact():
     expected = 0.5*(1/(energies+1.j*eta+0.5*U)+1/(energies+1.j*eta-0.5*U))
     assert np.allclose(expected, gf(energies, eta))
 
+def test_phs():
+    # Test particle hole symmetry
+    from shared import params
 
-def test_gf_exact_plot():
+    t = 0.1
+    H = H_(ed,t)
+    V = V_(U)
 
-    from matplotlib import pyplot as plt
+    params['hfmode'] = False
+    mu = ed + U/2.
+    gf = build_gf_exact(H, V, beta=beta, mu=mu)
 
-    ed = 0.5
-    t = 0.2
-    beta = 100
-
-    H = np.array([
-        [ed,-t],
-        [-t,ed]
-    ])
+    params['hfmode'] = True # U(n-0.5)(n-0.5)
+    mu = ed
+    gf_phs = build_gf_exact(H, V, beta=beta, mu=mu)
 
     eta = 1e-3
-    energies = np.arange(-2,2,1e-3)
+    energies = 10*np.random.random(20) - 5
 
-    for iU, U in enumerate(np.arange(0,10*t,0.5)):
-
-        mu = ed + U/2.
-
-        V = np.array([
-            [U,0],
-            [0,U]
-        ])
-
-        gf = build_gf_exact(H, V, beta=beta, mu=mu)
-
-        # https://www.cond-mat.de/events/correl20/manuscripts/pavarini.pdf
-        plt.plot(energies, -1/np.pi*gf(energies, eta).imag + iU*10)
-
-    plt.savefig('gf.png')
-    plt.close()
+    #https://www.cond-mat.de/events/correl16/manuscripts/scalettar.pdf
+    assert np.allclose(gf_phs(energies, eta), gf(energies, eta))
