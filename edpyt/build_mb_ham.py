@@ -67,7 +67,7 @@ def add_hoppings(ix_s, states, T_data, T_r, T_c, count, val, row, col):
     return count
 
 
-def build_mb_ham(H, V, states_up, states_dw):
+def build_mb_ham(H, V, states_up, states_dw, hfmode=False):
     """Build sparse Hamiltonian of the sector.
 
     Args:
@@ -101,6 +101,10 @@ def build_mb_ham(H, V, states_up, states_dw):
 
         # Doubly-occupied : \sum_{l,sigma} n^+_{l,sigma} n_{l,sigma'}
         onsite_int = np.sum(V.diagonal() * binrep(sup&sdw, n))
+        if hfmode:
+            onsite_int -= 0.5 * np.sum(V.diagonal() * binrep(sup&sdw, n))
+            onsite_int += 0.25 * np.sum(V.diagonal())
+
 
         vec_diag[i] = onsite_energy + onsite_int
 

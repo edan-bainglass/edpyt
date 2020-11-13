@@ -46,9 +46,7 @@ def build_gf_exact(H, V, beta, mu=0.):
     #            N,N',l,l'.
     #
     n = H.shape[0]
-
     espace, egs = build_espace(H, V)
-
     lambdas = []
     qs = []
     #  ____
@@ -99,7 +97,7 @@ def build_gf_exact(H, V, beta, mu=0.):
     Z = sum(np.exp(-beta*(sct.eigvals-mu*(nup+ndw))).sum() for
         (nup, ndw), sct in espace.items())
 
-    qs = np.array(qs)*(1/Z)
+    qs = np.array(qs)/Z
     lambdas = np.array(lambdas)
 
     return Gf(qs, lambdas)

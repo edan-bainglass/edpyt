@@ -1,74 +1,63 @@
 import numpy as np
-from numpy.linalg import qr, build_espace
 from scipy.linalg import norm
-
-def NSI(A, tol=1E-14, maxiter=5000):
-    '''Obtain Eigendecomposition of matrix A via Normalized Simultaneous QR Iteration in k steps'''
-    #Get Eigenvalues, Eigenvectors via QR Algorithm (Normalized Simultaneous Iteration)
-    m = A.shape[0]
-    Q = np.identity(m)
-    residual = 10
-    lprev = np.ones(m)
-    ctr = 0
-    while norm(residual) > tol:
-        Q,R = qr(A@Q)
-        lam = np.diagonal(Q.T @ A @ Q) #Rayleigh Quotient Matrix
-        residual = norm(lprev - np.sort(lam))
-        lprev = np.sort(lam)
-        ctr += 1
-        if ctr == maxiter: break
-    #print(ctr)
-        
-    return(lam)
+from scipy.linalg.blas import get_blas_funcs
+from scipy.linalg.lapack import get_lapack_funcs
 
 
-def LanczosTri(A):
-    '''Tridiagonalize Matrix A via Lanczos Iterations'''
-    
-    #Check if A is symmetric
-    #if((A.transpose() != A).any()):
-    #    print("WARNING: Input matrix is not symmetric")
-    n = A.shape[0]
-    x = np.ones(n)                      #Random Initial Vector
-    V = np.zeros((n,1))                 #Tridiagonalizing Matrix
+axpy = get_blas_funcs('axpy', dtype=np.float64)
+scal = get_blas_funcs('scal', dtype=np.float64)
+swap = get_blas_funcs('swap', dtype=np.float64)
+stebz = get_lapack_funcs('stebz', dtype=np.float64)
 
-    #Begin Lanczos Iteration
-    q = x/norm(x)
-    V[:,0] = q
-    r = A @ q
-    a1 = q.T @ r
-    r = r - a1*q
-    b1 = norm(r)
-    ctr = 0
-    #print("a1 = %.12f, b1 = %.12f"%(a1,b1))
-    for j in range(2,n+1):
-        v = q
-        q = r/b1
-        r = A @ q - b1*v
-        a1 = q.T @ r
-        r = r - a1*q
-        b1 = norm(r)
-        
-        #Append new column vector at the end of V
-        V = np.hstack((V,np.reshape(q,(n,1))))
 
-        #Reorthogonalize all previous v's
-        V = qr(V)[0]
+egs_tridiag = lambda a, b: stebz(a,b,2,0.,1.,1,1,0.,'E')[1][0]
 
-        ctr+=1
-        
-        if b1 == 0: 
-            print("WARNING: Lanczos ended due to b1 = 0")
-            return V #Need to reorthonormalize
-        
-        #print(np.trace(V.T@V)/j)
-    #Check if V is orthonormal
-    #print("|V.T@V - I| = ")
-    #print(np.abs((V.T@V)-np.eye(n)))
-    #if((V.T@V != np.eye(n)).any()):
-    #    print("WARNING: V.T @ V != I: Orthonormality of Transform Lost")
-        
-    #Tridiagonal matrix similar to A
-    T = V.T @ A @ V
-    
-    return T
+
+def build_sl_tridiag(matvec, phi0, maxn=300, delta=1e-15, tol=1e-10, ND=10):
+    '''Build tridiagonal coeffs. with simple Lanczos method.
+
+    Args:
+        maxn : max. # of iterations
+        delta : set threshold for min || b[n] ||.
+        tol : set threshold for min change in groud state energy.
+        ND : # of iterations to check change in groud state energy.
+
+    Returns:
+        a : diagonal elements
+        b : off-diagonal elements
+
+    Note:
+        T := diag(a,k=0) + diag(b,k=1) + diag(b,k=-1)
+
+    '''
+    a = np.empty(maxn, dtype=np.float64)
+    b = np.empty(maxn, dtype=np.float64)
+    # Loops vars.
+    converged = False
+    egs_prev = np.inf
+    l = np.zeros_like(phi0)
+    v = phi0
+    #
+    n = 0
+    while not converged:
+        for _ in range(ND):
+            b[n] = norm(v)
+            if (abs(b[n])<delta) or (n>=maxn):
+                converged = True
+                break
+            scal(1/b[n],v)
+            w = matvec(v)
+            a[n] = v.dot(w)
+            # w -= a[n] * v + b[n] * l
+            axpy(v,w,v.size,-a[n])
+            axpy(l,w,l.size,-b[n])
+            l = v
+            v = w
+            n += 1
+        egs = egs_tridiag(a[:n],b[1:n])
+        if abs(egs - egs_prev)<tol:
+            converged = True
+        else:
+            egs_prev = egs
+
+    return a[:n], b[:n]

@@ -40,7 +40,7 @@ def binrep(i, n, format="array"):
 
 @njit('UniTuple(int64,2)(int64,int64,int64)')
 def get_spin_indices(i, dup, dwn):
-    """Return spin indices from state i = iup + dup*idw.
+    """Implements map i = iup + dup*idw -> (iup,idw).
 
     """
     iup = i%dup
@@ -50,7 +50,23 @@ def get_spin_indices(i, dup, dwn):
 
 @njit('int64(int64,int64,int64)')
 def get_state_index(iup, idw, dup):
-    """Return state index from spin indices i = iup + dup*idw.
+    """Implements map (iup,idw) -> i = iup + dup*idw.
 
     """
     return iup + idw * dup
+
+
+# @njit('UniTuple(int64,2)(int64)')
+def get_num_spins(isct, n):
+    """Implements map isct -> (nup,ndw)
+
+    """
+    return np.unravel_index(isct,(n+1,n+1))
+
+
+# @njit('int64(int64,int64,int64)')
+def get_sector_index(nup, ndw, n):
+    """Implements map (nup,ndw) -> isct
+
+    """
+    return np.ravel_multi_index((nup,ndw),(n+1,n+1))
