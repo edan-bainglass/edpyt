@@ -27,7 +27,7 @@ def build_sl_tridiag(matvec, phi0, maxn=300, delta=1e-15, tol=1e-10, ND=10):
         b : off-diagonal elements
 
     Note:
-        T := diag(a,k=0) + diag(b,k=1) + diag(b,k=-1)
+        T := diag(a,k=0) + diag(b[1:],k=1) + diag(b[1:],k=-1)
 
     '''
     a = np.empty(maxn, dtype=np.float64)

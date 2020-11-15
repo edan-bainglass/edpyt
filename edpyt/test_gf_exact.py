@@ -46,16 +46,35 @@ def test_phs():
     H = H_(ed,t)
     V = V_(U)
 
+    # \sum_{i,spin} -t_ij c(i,s)^+ c(j,s)
+
+    # ----------------------------------
+    # + \sum{i} U_i n(i,up) + n(i,dw)
+    # + \sum{i,spin} e_i n(i,s)
+    # ----------------------------------
     params['hfmode'] = False
     mu = ed + U/2.
     gf = build_gf_exact(H, V, beta=beta, mu=mu)
 
-    params['hfmode'] = True # U(n-0.5)(n-0.5)
+    # ----------------------------------
+    # + \sum{i} U_i (n(i,up)-0.5) + (n(i,dw)-0.5)
+    # + \sum{i,spin} e_i n(i,s)
+    # ----------------------------------
+    params['hfmode'] = True # U(nup-0.5)(ndw-0.5)
     mu = ed
     gf_phs = build_gf_exact(H, V, beta=beta, mu=mu)
+
+    # ----------------------------------
+    # + \sum{i} U_i (n(i,up)-0.5) + (n(i,dw)-0.5)
+    # + \sum{i,spin} (e_i-mu) n(i,s)
+    # ----------------------------------
+    params['mu'] = ed # (ed-mu)(nup+ndw)
+    mu = 0.
+    gf_phs_mu0 = build_gf_exact(H, V, beta=beta, mu=mu)
 
     eta = 1e-3
     energies = 10*np.random.random(20) - 5
 
     #https://www.cond-mat.de/events/correl16/manuscripts/scalettar.pdf
     assert np.allclose(gf_phs(energies, eta), gf(energies, eta))
+    assert np.allclose(gf_phs_mu0(energies, eta), gf(energies, eta))

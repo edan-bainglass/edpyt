@@ -17,7 +17,7 @@ from sector import (
 )
 
 
-"""Hubbard dimer atomic limit.
+"""Hubbard chain.
 
 """
 
@@ -38,7 +38,7 @@ V_ = lambda U, n: np.diag([U]*n)
 H = H_(ed,t,n)
 V = V_(U,n)
 
-def test_build_gf_lanczos():
+def test_build_gf_lanczos_hubchain():
     from matplotlib import pyplot as plt
     from shared import params
 
@@ -55,7 +55,7 @@ def test_build_gf_lanczos():
         ] = 5
 
     espace, egs = build_espace(H, V, neig_sector)
-    gf = build_gf_lanczos(H, V, espace, beta=beta, mu=params['mu'])
+    gf = build_gf_lanczos(H, V, espace, beta=beta, mu=0.)
 
     eta = 1e-3
     energies = np.arange(-2,2,1e-3)
