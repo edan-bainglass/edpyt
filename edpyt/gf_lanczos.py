@@ -119,7 +119,7 @@ def build_gf_lanczos(H, V, espace, beta, mu=0.):
                 aJ, bJ = build_sl_tridiag(matvec, v0)
                 bJ **= 2
                 bJ[0] *= exponent
-                gf.add(aJ, bJ)
+                gf.add((aJ-sctI.eigvals[iI]), bJ)
             # N-1 (one more up spin)
             nupJ = nupI-1
             ndwJ = ndwI
@@ -149,7 +149,7 @@ def build_gf_lanczos(H, V, espace, beta, mu=0.):
                 aJ, bJ = build_sl_tridiag(matvec, v0)
                 bJ **= 2
                 bJ[0] *= exponent
-                gf.add(-aJ, bJ)
+                gf.add(-(aJ-sctI.eigvals[iI]), bJ)
 
     # Partition function (Z)
     Z = sum(np.exp(-beta*(sct.eigvals-mu*(nup+ndw))).sum() for
