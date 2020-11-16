@@ -49,10 +49,10 @@ def test_build_gf_lanczos_hubchain():
 
     neig_sector[
         get_sector_index(nup, ndw, n)
-        ] = 5 #get_sector_dim(n, nup) * get_sector_dim(n, ndw)
+        ] = 2 #get_sector_dim(n, nup) * get_sector_dim(n, ndw)
     neig_sector[
         get_sector_index(ndw, nup, n)
-        ] = 5
+        ] = 2
 
     espace, egs = build_espace(H, V, neig_sector)
     gf = build_gf_lanczos(H, V, espace, beta=beta, mu=0.)

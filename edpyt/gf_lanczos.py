@@ -40,6 +40,8 @@ def continued_fraction(a, b):
             return b[sz-n] / (e + 1.j*eta - a[sz-n])
         else:
             return b[sz-n] / (e + 1.j*eta - a[sz-n] - inner(e, eta, n-1))
+    inner.a = a
+    inner.b = b
     return inner
 
 

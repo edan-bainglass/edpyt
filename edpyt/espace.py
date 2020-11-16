@@ -108,7 +108,7 @@ def build_espace(H, V, neig_sector=None, cutoff=np.inf):
     egs = np.inf
     for nup in range(n+1):
         states_up = generate_states(n, nup)
-        for ndw in range(nup,n+1):
+        for ndw in range(n+1):
             # Sequential index sector.
             isct = get_sector_index(nup, ndw, n)
             if neig_sector[isct] == 0:
@@ -124,15 +124,15 @@ def build_espace(H, V, neig_sector=None, cutoff=np.inf):
                 eigvals,
                 eigvecs
             )
-            if nup != ndw:
-                espace[(ndw,nup)] = Sector(
-                    States(states_dw, states_up),
-                    states_up.size*states_dw.size,
-                    states_dw.size,
-                    states_up.size,
-                    eigvals,
-                    eigvecs
-                )
+            # if nup != ndw:
+            #     espace[(ndw,nup)] = Sector(
+            #         States(states_dw, states_up),
+            #         states_up.size*states_dw.size,
+            #         states_dw.size,
+            #         states_up.size,
+            #         eigvals,
+            #         eigvecs
+            #     )
 
             # Update GS energy
             egs = min(eigvals.min(), egs)
