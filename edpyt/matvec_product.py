@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.sparse.linalg.interface import LinearOperator
+import _psparse
 
 from scipy.sparse import (
     # kronsum(A_mm, B_nn) = kron(I_n,A) + kron(B,I_m)
@@ -27,10 +28,11 @@ def matvec_operator(vec_diag, sp_mat_up, sp_mat_dw):
     # sp_diag = sp_diag_matrix(vec_diag)
     # op = sp_diag + kronsum(sp_mat_up, sp_mat_dw)
     def matvec(vec):
-        # return op.dot(vec)
         res = vec_diag * vec
-        res += sp_mat_up.dot(vec.reshape(dwn,dup).T).T.flatten()
-        res += sp_mat_dw.dot(vec.reshape(dwn,dup)).flatten()
+        # res += sp_mat_up.dot(vec.reshape(dwn,dup).T).T.flatten()
+        # res += sp_mat_dw.dot(vec.reshape(dwn,dup)).flatten()
+        _psparse.UPmultiply(sp_mat_up,vec,res)
+        _psparse.DWmultiply(sp_mat_dw,vec,res)
         return res
     return LinearOperator((d,d), matvec, vec_diag.dtype)
 

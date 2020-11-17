@@ -38,7 +38,8 @@ def binrep(i, n, format="array"):
             "Invalid format type {}.".format(format))
 
 
-@njit('UniTuple(int64,2)(int64,int64,int64)')
+@njit(['UniTuple(int64,2)(int64,int64,int64)',
+       'UniTuple(int32,2)(int32,int32,int32)'])
 def get_spin_indices(i, dup, dwn):
     """Implements map i = iup + dup*idw -> (iup,idw).
 
@@ -48,7 +49,8 @@ def get_spin_indices(i, dup, dwn):
     return iup, idw
 
 
-@njit('int64(int64,int64,int64)')
+@njit(['int64(int64,int64,int64)',
+       'int32(int32,int32,int32)'])
 def get_state_index(iup, idw, dup):
     """Implements map (iup,idw) -> i = iup + dup*idw.
 

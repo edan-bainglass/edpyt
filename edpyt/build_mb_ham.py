@@ -43,7 +43,8 @@ Conventions:
 """
 
 
-@njit('int64(int64,uint32[:],float64[:],int64[:],int64[:],int64,float64[:],int64[:],int64[:])')
+@njit(['int64(int64,uint32[:],float64[:],int64[:],int64[:],int64,float64[:],int64[:],int64[:])',
+       'int64(int64,uint32[:],float64[:],int64[:],int64[:],int64,float64[:],int32[:],int32[:])'])
 def add_hoppings(ix_s, states, T_data, T_r, T_c, count, val, row, col):
     """Add hoppings to many-body Hamiltonian.
 
@@ -177,7 +178,7 @@ def empty_coomat(nnz_count, shape):
     """
     zeros = lambda dtype: np.zeros(nnz_count, dtype=dtype)
     data = np.zeros(nnz_count, np.float64)
-    row = np.zeros(nnz_count, np.int64)
-    col = np.zeros(nnz_count, np.int64)
+    row = np.zeros(nnz_count, np.int32)
+    col = np.zeros(nnz_count, np.int32)
     mat = _coo_matrix(data, row, col, shape)
     return mat

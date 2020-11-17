@@ -5,10 +5,12 @@ from operators import (
     cdg
 )
 
+import numpy as np
+
 def test_fsgn():
 
     s = int("101101",base=2)
-    assert fsgn(s, 2) == (-1)**1
+    assert fsgn(s, np.int32(2)) == (-1)**1
     assert fsgn(s, 3) == (-1)**2
     assert fsgn(s, 6) == (-1)**4
 

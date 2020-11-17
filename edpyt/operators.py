@@ -6,7 +6,8 @@ from shared import (
     unsiged_dt
 )
 
-@njit('uint32(uint32,int64)')
+@njit(['uint32(uint32,int64)',
+       'uint32(uint32,int32)'])
 def flip(s, pos):
     """Flip spin at position pos.
 
@@ -15,7 +16,8 @@ def flip(s, pos):
     return s_out
 
 
-@njit('int64(uint32,int64)')
+@njit(['int64(uint32,int64)',
+       'int32(uint32,int32)'])
 def fsgn(s, pos):
     """Fermionic sign of state s.
 
@@ -26,7 +28,8 @@ def fsgn(s, pos):
     return 1-2*(bits%2)
 
 
-@njit('Tuple((int64,uint32))(uint32,int64)')
+@njit(['Tuple((int64,uint32))(uint32,int64)',
+       'Tuple((int32,uint32))(uint32,int32)'])
 def cdg(s, pos):
     """Fermionic creation operator.
 
@@ -46,7 +49,8 @@ def cdg(s, pos):
     return fermionic_sgn, s_out
 
 
-@njit('Tuple((int64,uint32))(uint32,int64)')
+@njit(['Tuple((int64,uint32))(uint32,int64)',
+       'Tuple((int32,uint32))(uint32,int32)'])
 def c(s, pos):
     """Fermionic annihilation operator.
 
