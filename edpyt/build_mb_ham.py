@@ -43,30 +43,31 @@ Conventions:
 """
 
 
-@njit(['int64(int64,uint32[:],float64[:],int64[:],int64[:],int64,float64[:],int64[:],int64[:])',
-       'int64(int64,uint32[:],float64[:],int64[:],int64[:],int64,float64[:],int32[:],int32[:])'])
-def add_hoppings(ix_s, states, T_data, T_r, T_c, count, val, row, col):
+@njit(['UniTuple(int64,2)(int64,uint32[:],float64[:],int64[:],int64[:],int64,float64[:],int64[:])',
+       'UniTuple(int64,2)(int64,uint32[:],float64[:],int64[:],int64[:],int64,float64[:],int32[:])'])
+def add_hoppings(ix_s, states, T_data, T_r, T_c, cumcnt, val, col):
     """Add hoppings to many-body Hamiltonian.
 
     Args:
         ix_s : initial state (index) in `states`
         states : spin states
         T_data, T_r, T_r : hopping coo matrix vectors
-        count : sequential index in many-body vectors
-        val, row, col : many-body coo matrix vectors
+        cumcnt : sequential index in many-body vectors
+        val, col : many-body csr matrix vectors
 
     """
     s = states[ix_s]
+    initcnt = cumcnt
 
     for i, j, elem in zip(T_r, T_c, T_data):
         if (not (s>>i)&unsiged_dt(1)) and ((s>>j)&unsiged_dt(1)):
             sgn_t, t = c(s, j)
             sgn_f, f = cdg(t, i)
-            val[count] += elem * np.float64(sgn_t * sgn_f)
-            row[count] += ix_s
-            col[count] += np.searchsorted(states, f)
-            count += 1
-    return count
+            val[cumcnt] += elem * np.float64(sgn_t * sgn_f)
+            col[cumcnt] += np.searchsorted(states, f)
+            cumcnt += 1
+    addcnt = cumcnt-initcnt
+    return cumcnt, addcnt
 
 @njit('float64(float64[:],uint32)')
 def sum_diags_contrib(diags, s):
@@ -144,44 +145,46 @@ def build_mb_ham(H, V, states_up, states_dw):
     nnz_offdiag = len(T.data)
 
     nnz_up_count = nnz_offdiag * int(binom(n-2, nup-1))
-    sp_mat_up = empty_coomat(nnz_up_count, (dup, dup))
+    sp_mat_up = empty_csrmat(nnz_up_count, (dup, dup))
 
     count = 0
     for iup in range(dup):
-        count = add_hoppings(iup, states_up,
+        count, added = add_hoppings(iup, states_up,
             # Hoppings
             T.data, T.row, T.col,
             # Sequential index in many-body nnz.
             count,
             # Many-Body Hamiltonian
-            sp_mat_up.data, sp_mat_up.row, sp_mat_up.col)
+            sp_mat_up.data, sp_mat_up.col)
+        sp_mat_up.row[iup+1] = sp_mat_up.row[iup] + added
 
     nnz_dw_count = nnz_offdiag * int(binom(n-2, ndw-1))
-    sp_mat_dw = empty_coomat(nnz_dw_count, (dwn, dwn))
+    sp_mat_dw = empty_csrmat(nnz_dw_count, (dwn, dwn))
 
     count = 0
     for idw in range(dwn):
-        count = add_hoppings(idw, states_dw,
+        count, added = add_hoppings(idw, states_dw,
             # Hoppings
             T.data, T.row, T.col,
             # Sequential index in many-body nnz.
             count,
             # Many-Body Hamiltonian
-            sp_mat_dw.data, sp_mat_dw.row, sp_mat_dw.col)
+            sp_mat_dw.data, sp_mat_dw.col)
+        sp_mat_dw.row[idw+1] = sp_mat_dw.row[idw] + added
 
     return (
         vec_diag,
         csr_matrix(
-            (sp_mat_up.data, (sp_mat_up.row,sp_mat_up.col)),
+            (sp_mat_up.data, sp_mat_up.col, sp_mat_up.row),
             shape=sp_mat_up.shape),
         csr_matrix(
-            (sp_mat_dw.data, (sp_mat_dw.row,sp_mat_dw.col)),
+            (sp_mat_dw.data, sp_mat_dw.col, sp_mat_dw.row),
             shape=sp_mat_dw.shape)
     )
 
 
 # scipy::sparse::coo_matrix might set index_type to np.int32.
-_coo_matrix = namedtuple('coo_matrix',['data','row','col','shape'])
+_csr_matrix = namedtuple('csr_matrix',['data','row','col','shape'])
 
 
 def nnz_offdiag_coomat(mat):
@@ -194,17 +197,16 @@ def nnz_offdiag_coomat(mat):
     nzi = nzi[neq]
     nzj = nzj[neq]
     data = mat[nzi, nzj]
-    mat = _coo_matrix(data, nzi, nzj, mat.shape)
+    mat = _csr_matrix(data, nzi, nzj, mat.shape)
     return mat
 
-
-def empty_coomat(nnz_count, shape):
+def empty_csrmat(nnz_count, shape):
     """Return scipy::sparse::coo_matrix with nnz_count elements.
 
     """
     zeros = lambda dtype: np.zeros(nnz_count, dtype=dtype)
     data = np.zeros(nnz_count, np.float64)
-    row = np.zeros(nnz_count, np.int32)
+    row = np.zeros(shape[0]+1, np.int32)
     col = np.zeros(nnz_count, np.int32)
-    mat = _coo_matrix(data, row, col, shape)
+    mat = _csr_matrix(data, row, col, shape)
     return mat
