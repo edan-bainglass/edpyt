@@ -104,11 +104,11 @@ def build_mb_ham(H, V, states_up, states_dw):
     if abs(params['mu']) > 0.:
         mu = params['mu']
         ener_diags -= mu
-    # Hartree term : \sum_{l,sigma} U(n^+_{l,sigma}-1/2)
+    # Hartree term : \sum_{l,sigma} -0.5*U_l n^+_{l,sigma} + 0.25*U_l
     hfshift = 0.
     if params['hfmode'] == True:
         ener_diags -= 0.5 * int_diags
-        hfshift = 0.25
+        hfshift = 0.25 * int_diags.sum()
 
     nup = count_bits(states_up[0],n)
     ndw = count_bits(states_dw[0],n)
