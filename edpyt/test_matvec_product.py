@@ -9,8 +9,8 @@ from matvec_product import (
 
 def test_matvec_product():
 
-    dup = 100
-    dwn = 200
+    dup = 10
+    dwn = 20
 
     Hup = np.random.random((dup,dup))
     Hdw = np.random.random((dwn,dwn))

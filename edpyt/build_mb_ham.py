@@ -68,6 +68,25 @@ def add_hoppings(ix_s, states, T_data, T_r, T_c, count, val, row, col):
             count += 1
     return count
 
+@njit('float64(float64[:],uint32)')
+def sum_diags_contrib(diags, s):
+    """Sum diagonal energetic contributions for state s.
+
+    Args:
+        diags : onsite energies.
+        s : state
+
+    Return:
+        res : sum of diagonal contrbutions.
+
+    """
+    n = diags.size
+    res = 0.
+    for i in range(n):
+        if (s>>i)&unsiged_dt(1):
+            res += diags[i]
+    return res
+
 
 def build_mb_ham(H, V, states_up, states_dw):
     """Build sparse Hamiltonian of the sector.
@@ -80,6 +99,17 @@ def build_mb_ham(H, V, states_up, states_dw):
     """
 
     n = H.shape[0]
+    ener_diags = H.diagonal().copy()
+    int_diags = V.diagonal().copy()
+    if abs(params['mu']) > 0.:
+        mu = params['mu']
+        ener_diags -= mu
+    # Hartree term : \sum_{l,sigma} U(n^+_{l,sigma}-1/2)
+    hfshift = 0.
+    if params['hfmode'] == True:
+        ener_diags -= 0.5 * int_diags
+        hfshift = 0.25
+
     nup = count_bits(states_up[0],n)
     ndw = count_bits(states_dw[0],n)
 
@@ -92,24 +122,20 @@ def build_mb_ham(H, V, states_up, states_dw):
     # On-site terms :
     for i in range(d):
 
+        onsite_energy = 0.
+        onsite_int    = hfshift
+
         iup, idw = get_spin_indices(i, dup, dwn)
 
         sup = states_up[iup]
         sdw = states_dw[idw]
 
         # Singly-occupied : \sum_{l,sigma} n^+_{l,sigma}
-        bup = binrep(sup, n)
-        bdw = binrep(sdw, n)
-        onsite_energy = np.sum(H.diagonal() * (bup+bdw))
-        if params.get('mu',None) is not None:
-            mu = params['mu']
-            onsite_energy -= np.sum(mu * (bup+bdw))
+        onsite_energy += sum_diags_contrib(ener_diags, sup)
+        onsite_energy += sum_diags_contrib(ener_diags, sdw)
 
         # Doubly-occupied : \sum_{l,sigma} n^+_{l,sigma} n_{l,sigma'}
-        onsite_int = np.sum(V.diagonal() * binrep(sup&sdw, n))
-        # Hartree term : \sum_{l,sigma} U(n^+_{l,sigma}-1/2)
-        if params['hfmode']:
-            onsite_int -= 0.5 * np.sum(V.diagonal() * (bup+bdw-0.5*np.ones_like(bup)))
+        onsite_int += sum_diags_contrib(int_diags, sup&sdw)
 
         vec_diag[i] = onsite_energy + onsite_int
 

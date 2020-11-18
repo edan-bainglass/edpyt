@@ -31,7 +31,7 @@ def binrep(i, n, format="array"):
 
     arr_repr = np.fromiter(str_repr,dtype='S1').astype(unsiged_dt)
     if format in ["array","arr"]:
-        return arr_repr
+        return arr_repr[::-1]
 
     else:
         raise ValueError(

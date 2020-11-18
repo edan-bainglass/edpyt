@@ -30,7 +30,9 @@ V = np.array([
 
 def test_build_mb_ham():
 
-    # sz = 0 sector
+    from shared import params
+    params['hfmode'] = False
+    params['mu'] = 0.
 
     n = H.shape[0]
     nup = 1
@@ -70,10 +72,10 @@ def test_build_mb_ham():
     #   s3      0    |  -t12 |   -t12  | 2*e1+U1
 
     expected = np.array([
-        [2*e2+U2,t21,t21,0],
+        [2*e1+U1,t21,t21,0],
         [t12,e1+e2,0,t21],
         [t12,0,e1+e2,t21],
-        [0,t12,t12,2*e1+U1]
+        [0,t12,t12,2*e2+U2]
     ])
 
     np.savetxt('mb_ham.txt', mb_ham, fmt='%.2f')
