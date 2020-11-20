@@ -41,6 +41,29 @@ Conventions:
     dwn : sectot number of down spin states (all possible permutations of ndw in n)
 
 """
+# spec = [
+#     ('shape',UniTuple(int32,2)),
+#     ('data',float64[:]),
+#     ('row',int32[:]),
+#     ('col',int32[:]),
+# ]
+#
+# @jitclass(spec)
+# class cs:
+#     def __init__(self, data, row, col, shape):
+#         self.shape = shape
+#         self.data = data
+#         self.row = row
+#         self.col = col
+#
+# cs_type = cs.class_type.instance_type
+#
+# @njit(cs_type(int32,UniTuple(int32,2)))
+# def empty_csrmat(nnz, shape):
+#     data = np.empty(nnz,float64)
+#     row = np.empty(shape[0]+1,int32); row[0] = 0
+#     col = np.empty(nnz,int32)
+#     return cs(data, row, col, shape)
 
 
 @njit(['int64(int64,uint32[:],float64[:],int64[:],int64[:],int64,float64[:],int64[:],int64[:])',
@@ -100,13 +123,14 @@ def build_mb_ham(H, V, states_up, states_dw):
         nup : number of up spins
         ndw : number of down spins
     """
-
     n = H.shape[0]
     ener_diags = H.diagonal().copy()
     int_diags = V.diagonal().copy()
+
     if abs(params['mu']) > 0.:
         mu = params['mu']
         ener_diags -= mu
+
     # Hartree term : \sum_{l,sigma} -0.5*U_l n^+_{l,sigma} + 0.25*U_l
     hfshift = 0.
     if params['hfmode'] == True:
@@ -120,27 +144,27 @@ def build_mb_ham(H, V, states_up, states_dw):
     dwn = states_dw.size
     d = dup * dwn
 
-    vec_diag = np.zeros(d, dtype=np.float64)
-
     # On-site terms :
-    for i in range(d):
+    vec_diag = np.empty(d)
+    vec_diag_up = np.empty(dup)
 
-        onsite_energy = 0.
-        onsite_int    = hfshift
+    dup = states_up.size
+    dwn = states_dw.size
 
-        iup, idw = get_spin_indices(i, dup, dwn)
-
+    for iup in range(dup):
         sup = states_up[iup]
+        vec_diag_up[iup] = sum_diags_contrib(ener_diags, sup)
+
+    for idw in range(dwn):
+        row_offset = idw*dup
         sdw = states_dw[idw]
-
-        # Singly-occupied : \sum_{l,sigma} n^+_{l,sigma}
-        onsite_energy += sum_diags_contrib(ener_diags, sup)
-        onsite_energy += sum_diags_contrib(ener_diags, sdw)
-
-        # Doubly-occupied : \sum_{l,sigma} n^+_{l,sigma} n_{l,sigma'}
-        onsite_int += sum_diags_contrib(int_diags, sup&sdw)
-
-        vec_diag[i] = onsite_energy + onsite_int
+        onsite_energy_dw = sum_diags_contrib(ener_diags, sdw)
+        for iup in range(dup):
+            sup = states_up[iup]
+            i = iup + row_offset
+            onsite_int    = sum_diags_contrib(int_diags, sup&sdw)
+            onsite_energy = vec_diag_up[iup] + onsite_energy_dw
+            vec_diag[i] = onsite_energy + onsite_int + hfshift
 
     # Hoppings
     T = nnz_offdiag_coomat(H)

@@ -55,13 +55,8 @@ class Gf:
             continued_fraction(a, b)
         )
     def __call__(self, e, eta):
-        # pool = Pool(4)
-        # rets = [pool.apply(f, args=(e, eta,)) for f in self.funcs]
-        # out = np.sum([r.get() for r in rets], axis=0)
-        # pool.close()
         out = np.sum([f(e, eta) for f in self.funcs], axis=0)
         return out / self.Z
-
 
 
 def build_gf_lanczos(H, V, espace, beta, mu=0.):
@@ -104,16 +99,16 @@ def build_gf_lanczos(H, V, espace, beta, mu=0.):
                 #             +
                 # < (N+1)l'| c(i)  | Nl >
                 #
-                for iL in range(sctI.d):
-                    iupI, idwI = get_spin_indices(iL, sctI.dup, sctI.dwn)
+                idwI = np.arange(sctI.dwn) * sctI.dup
+                idwJ = np.arange(sctJ.dwn) * sctJ.dup
+                for iupI in range(sctI.dup):
                     supI = sctI.states.up[iupI]
-                    sdwJ = sctI.states.dw[idwI]
                     # Check for empty impurity
                     if supI&unsiged_dt(1): continue
                     sgnJ, supJ = cdg(supI, 0)
                     iupJ = binsearch(sctJ.states.up, supJ)
-                    idwJ = idwI
-                    iM = get_state_index(iupJ, idwJ, sctJ.dup)
+                    iL = iupI + idwI
+                    iM = iupJ + idwJ
                     v0[iM] = sgnJ*sctI.eigvecs[iL,iI]
 
                 matvec = matvec_operator(
@@ -134,16 +129,16 @@ def build_gf_lanczos(H, V, espace, beta, mu=0.):
                 #
                 # < (N-1)l'| c(i)  | Nl >
                 #
-                for iL in range(sctI.d):
-                    iupI, idwI = get_spin_indices(iL, sctI.dup, sctI.dwn)
+                idwI = np.arange(sctI.dwn) * sctI.dup
+                idwJ = np.arange(sctJ.dwn) * sctJ.dup
+                for iupI in range(sctI.dup):
                     supI = sctI.states.up[iupI]
-                    sdwJ = sctI.states.dw[idwI]
-                    # Check for occupied imputiry
+                    # Check for occupied impurity
                     if not supI&unsiged_dt(1): continue
                     sgnJ, supJ = c(supI, 0)
                     iupJ = binsearch(sctJ.states.up, supJ)
-                    idwJ = idwI
-                    iM = get_state_index(iupJ, idwJ, sctJ.dup)
+                    iL = iupI + idwI
+                    iM = iupJ + idwJ
                     v0[iM] = sgnJ*sctI.eigvecs[iL,iI]
 
                 matvec = matvec_operator(
