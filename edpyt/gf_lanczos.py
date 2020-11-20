@@ -4,7 +4,8 @@ from multiprocessing import Pool
 
 from lookup import (
     get_spin_indices,
-    get_state_index
+    get_state_index,
+    binsearch
 )
 
 from shared import (
@@ -98,7 +99,7 @@ def build_gf_lanczos(H, V, espace, beta, mu=0.):
             # Cannot have more spin than spin states
             if nupJ <= n:
                 # Arrival sector
-                sctJ = build_empty_sector(n, nupJ, ndwJ)
+                sctJ = espace.get((nupJ, ndwJ), None) or build_empty_sector(n, nupJ, ndwJ)
                 v0 = np.zeros(sctJ.d)
                 #             +
                 # < (N+1)l'| c(i)  | Nl >
@@ -110,7 +111,7 @@ def build_gf_lanczos(H, V, espace, beta, mu=0.):
                     # Check for empty impurity
                     if supI&unsiged_dt(1): continue
                     sgnJ, supJ = cdg(supI, 0)
-                    iupJ = np.searchsorted(sctJ.states.up, supJ)
+                    iupJ = binsearch(sctJ.states.up, supJ)
                     idwJ = idwI
                     iM = get_state_index(iupJ, idwJ, sctJ.dup)
                     v0[iM] = sgnJ*sctI.eigvecs[iL,iI]
@@ -128,7 +129,7 @@ def build_gf_lanczos(H, V, espace, beta, mu=0.):
             # Cannot have negative spin
             if nupJ >= 0:
                 # Arrival sector
-                sctJ = build_empty_sector(n, nupJ, ndwJ)
+                sctJ = espace.get((nupJ, ndwJ), None) or build_empty_sector(n, nupJ, ndwJ)
                 v0 = np.zeros(sctJ.d)
                 #
                 # < (N-1)l'| c(i)  | Nl >
@@ -140,7 +141,7 @@ def build_gf_lanczos(H, V, espace, beta, mu=0.):
                     # Check for occupied imputiry
                     if not supI&unsiged_dt(1): continue
                     sgnJ, supJ = c(supI, 0)
-                    iupJ = np.searchsorted(sctJ.states.up, supJ)
+                    iupJ = binsearch(sctJ.states.up, supJ)
                     idwJ = idwI
                     iM = get_state_index(iupJ, idwJ, sctJ.dup)
                     v0[iM] = sgnJ*sctI.eigvecs[iL,iI]

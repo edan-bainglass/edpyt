@@ -58,6 +58,25 @@ def get_state_index(iup, idw, dup):
     return iup + idw * dup
 
 
+@njit(['int64(uint32[:],uint32)',
+       'int32(uint32[:],uint32)'])
+def binsearch(a, s):
+    """Binary search the element s in array a. Return index of s."""
+    lo = -1
+    hi = a.size
+    while hi-lo > 1:
+        m = (lo+hi)>>1
+        if a[m] <= s:
+            lo = m
+        else:
+            hi = m
+
+    if lo == -1 or a[lo] != s:
+        return -1
+    else:
+        return lo
+
+
 # @njit('UniTuple(int64,2)(int64)')
 def get_num_spins(isct, n):
     """Implements map isct -> (nup,ndw)

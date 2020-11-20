@@ -7,7 +7,8 @@ from espace import (
 
 from lookup import (
     get_spin_indices,
-    get_state_index
+    get_state_index,
+    binsearch
 )
 
 from shared import (
@@ -86,7 +87,7 @@ def build_gf_exact(H, V, beta, mu=0.):
                 # If not empty (imputiry)
                 if supI&unsiged_dt(1): continue
                 sgnJ, supJ = cdg(supI, 0)
-                iupJ = np.searchsorted(sctJ.states.up, supJ)
+                iupJ = binsearch(sctJ.states.up, supJ)
                 idwJ = idwI
                 iM = get_state_index(iupJ, idwJ, sctJ.dup)
                 residual += sctJ.eigvecs[iM,iJ]*sgnJ*sctI.eigvecs[iL,iI]

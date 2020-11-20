@@ -25,6 +25,10 @@ from sector import (
 
 """
 
+n = 13
+nup = 7
+ndw = 6
+
 n = 5
 nup = 2
 ndw = 3
@@ -93,29 +97,5 @@ def test_gf_lanczos_free():
     np.testing.assert_allclose(gf_computed,gf_expected,1e-3)
 
 
-# def test_free_gf_exact():
-#     from matplotlib import pyplot as plt
-#
-#     # from shared import params
-#     # params['mu'] = ed
-#     eimp = - 2.
-#     H[0,0] = eimp
-#
-#     gf = build_gf_exact(H, V, beta=beta, mu=0.)
-#
-#     eta = 0.25
-#     energies = np.arange(-10,10,1e-3)
-#
-#     # https://www.cond-mat.de/events/correl20/manuscripts/pavarini.pdf
-#     z = energies + 1.j*eta
-#     hybr = (t**2 / (z[:,None]-ed[None,:])).sum(1)
-#     gf_expected = 1/(z-eimp-hybr)
-#     gf_computed = gf(energies, eta)
-#
-#     plt.plot(energies,-1/np.pi*gf_expected.imag,label='expected')
-#     plt.plot(energies,-1/np.pi*gf_computed.imag,label='computed')
-#     plt.legend()
-#     plt.savefig('g0_exact.png')
-#     plt.close()
-#
-#     assert np.allclose(gf_computed,gf_expected,0.5)
+if __name__ == '__main__':
+    test_gf_lanczos_free()

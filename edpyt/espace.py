@@ -94,15 +94,6 @@ def build_espace(H, V, neig_sector=None, cutoff=np.inf):
             neig_sector[
                 get_sector_index(nup,ndw,n)
             ] = get_sector_dim(n,nup)*get_sector_dim(n,ndw)
-    # es_vals = []
-    # es_vecs = []
-    # es_isct = []
-    #
-    # # Helper function
-    # def insert(idx, w, v, isct):
-    #     es_vals.insert(idx, w)
-    #     es_vecs.insert(idx, v)
-    #     es_isct.insert(idx, isct)
 
     # Fill in eigen states in eigen space
     egs = np.inf
@@ -124,30 +115,8 @@ def build_espace(H, V, neig_sector=None, cutoff=np.inf):
                 eigvals,
                 eigvecs
             )
-            # if nup != ndw:
-            #     espace[(ndw,nup)] = Sector(
-            #         States(states_dw, states_up),
-            #         states_up.size*states_dw.size,
-            #         states_dw.size,
-            #         states_up.size,
-            #         eigvals,
-            #         eigvecs
-            #     )
 
             # Update GS energy
             egs = min(eigvals.min(), egs)
-
-            # for i in range(eigvals.size):
-            #     w = eigvals[i]
-            #     v = eigvecs[:,i]
-            #     idx = np.searchsorted(eig_space[0], w)
-            #     # Update sector (nup, ndw).
-            #     insert(idx, w, v, isct)
-            #     # Update degenerate sector (ndw, nup).
-            #     insert(idx+1, w, v, get_sector_index(ndw,nup,n))
-
-
-    # # GS energy
-    # egs = es_vals[0]
 
     return espace, egs
