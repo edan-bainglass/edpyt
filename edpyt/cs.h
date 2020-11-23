@@ -23,8 +23,9 @@ typedef struct cs_sparse    /* matrix in compressed-column or triplet form */
 } cs ;
 
 csi csr_gaxpy (const cs *A, const double *x, double *y) ;
-csi csr_saxpy (const cs *A, const double *x, double *y, csi offset, csi stride) ;
+csi csr_saxpy (const cs *A, const double *x, double *y, csi i, csi n) ;
 
 #define CS_CSC(A) (A && (A->nz == -1))
 #define CS_CSR(A) (A && (A->nz == 1))
+#define MIN(a,b) (a < b ? a : b)
 #endif

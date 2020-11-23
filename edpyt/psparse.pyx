@@ -25,7 +25,7 @@ ctypedef struct cs:
     csi nz          # # of entries in triplet matrix, -1 for compressed-col
 
 cdef extern csi csr_gaxpy (cs *A, double *x, double *y) nogil
-cdef extern csi csr_saxpy (cs *A, double *x, double *y, csi offset, csi stride) nogil
+cdef extern csi csr_saxpy (cs *A, double *x, double *y, csi i, csi n) nogil
 
 assert sizeof(csi) == 4
 
@@ -91,6 +91,6 @@ def DWmultiply(X not None, np.ndarray[ndim=1, mode='c', dtype=np.float64_t] W no
 
     ndw = X.shape[0]
     nup = W.size // ndw
-    for i in prange(nup, nogil=True):
-        # Parallelize over columns
+    for i in prange(ndw, nogil=True):
+        # Parallelize over rows
         csr_saxpy(&csX, &W[0], &result[0], i, nup)

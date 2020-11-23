@@ -25,13 +25,9 @@ from sector import (
 
 """
 
-n = 13
+n = 11
 nup = 7
 ndw = 6
-
-n = 5
-nup = 2
-ndw = 3
 
 beta = 0.                # Zero Temperature
 eimp = - 2.              # Impurity level

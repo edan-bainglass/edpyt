@@ -2703,7 +2703,7 @@ static PyObject *__pyx_pf_8_psparse_2DWmultiply(CYTHON_UNUSED PyObject *__pyx_se
  * 
  *     ndw = X.shape[0]             # <<<<<<<<<<<<<<
  *     nup = W.size // ndw
- *     for i in prange(nup, nogil=True):
+ *     for i in prange(ndw, nogil=True):
  */
   __pyx_t_1 = __Pyx_PyObject_GetAttrStr(__pyx_v_X, __pyx_n_s_shape); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 92, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
@@ -2718,8 +2718,8 @@ static PyObject *__pyx_pf_8_psparse_2DWmultiply(CYTHON_UNUSED PyObject *__pyx_se
  * 
  *     ndw = X.shape[0]
  *     nup = W.size // ndw             # <<<<<<<<<<<<<<
- *     for i in prange(nup, nogil=True):
- *         # Parallelize over columns
+ *     for i in prange(ndw, nogil=True):
+ *         # Parallelize over rows
  */
   __pyx_t_6 = __Pyx_PyObject_GetAttrStr(((PyObject *)__pyx_v_W), __pyx_n_s_size); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 93, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_6);
@@ -2736,8 +2736,8 @@ static PyObject *__pyx_pf_8_psparse_2DWmultiply(CYTHON_UNUSED PyObject *__pyx_se
   /* "psparse.pyx":94
  *     ndw = X.shape[0]
  *     nup = W.size // ndw
- *     for i in prange(nup, nogil=True):             # <<<<<<<<<<<<<<
- *         # Parallelize over columns
+ *     for i in prange(ndw, nogil=True):             # <<<<<<<<<<<<<<
+ *         # Parallelize over rows
  *         csr_saxpy(&csX, &W[0], &result[0], i, nup)
  */
   {
@@ -2747,7 +2747,7 @@ static PyObject *__pyx_pf_8_psparse_2DWmultiply(CYTHON_UNUSED PyObject *__pyx_se
       __Pyx_FastGIL_Remember();
       #endif
       /*try:*/ {
-        __pyx_t_9 = __pyx_v_nup;
+        __pyx_t_9 = __pyx_v_ndw;
         if ((1 == 0)) abort();
         {
             #if ((defined(__APPLE__) || defined(__OSX__)) && (defined(__GNUC__) && (__GNUC__ > 2 || (__GNUC__ == 2 && (__GNUC_MINOR__ > 95)))))
@@ -2771,8 +2771,8 @@ static PyObject *__pyx_pf_8_psparse_2DWmultiply(CYTHON_UNUSED PyObject *__pyx_se
                             __pyx_v_i = (int)(0 + 1 * __pyx_t_11);
 
                             /* "psparse.pyx":96
- *     for i in prange(nup, nogil=True):
- *         # Parallelize over columns
+ *     for i in prange(ndw, nogil=True):
+ *         # Parallelize over rows
  *         csr_saxpy(&csX, &W[0], &result[0], i, nup)             # <<<<<<<<<<<<<<
  */
                             __pyx_t_8 = 0;
@@ -2796,8 +2796,8 @@ static PyObject *__pyx_pf_8_psparse_2DWmultiply(CYTHON_UNUSED PyObject *__pyx_se
       /* "psparse.pyx":94
  *     ndw = X.shape[0]
  *     nup = W.size // ndw
- *     for i in prange(nup, nogil=True):             # <<<<<<<<<<<<<<
- *         # Parallelize over columns
+ *     for i in prange(ndw, nogil=True):             # <<<<<<<<<<<<<<
+ *         # Parallelize over rows
  *         csr_saxpy(&csX, &W[0], &result[0], i, nup)
  */
       /*finally:*/ {
@@ -4980,7 +4980,7 @@ if (!__Pyx_RefNanny) {
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
 
   /* "psparse.pyx":30
- * cdef extern csi csr_saxpy (cs *A, double *x, double *y, csi offset, csi stride) nogil
+ * cdef extern csi csr_saxpy (cs *A, double *x, double *y, csi i, csi n) nogil
  * 
  * assert sizeof(csi) == 4             # <<<<<<<<<<<<<<
  * 
