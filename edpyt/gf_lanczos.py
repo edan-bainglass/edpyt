@@ -1,5 +1,5 @@
 import numpy as np
-from numba import njit, jit
+from numba import njit, typeof
 from multiprocessing import Pool
 
 from lookup import (
@@ -14,7 +14,9 @@ from shared import (
 
 from operators import (
     cdg,
-    c
+    c,
+    check_full,
+    check_empty
 )
 
 from matvec_product import (
@@ -59,6 +61,34 @@ class Gf:
         return out / self.Z
 
 
+def project(iI, pos, op, check_occupation, sctI, sctJ):
+    """Project state iL of sector sctI onto eigenbasis of sector sctJ.
+
+    """
+    #
+    # v[iM] = < (N+-1) | op(i) | N  >
+    #       |        iM            iI
+    #       |
+    #       |             ___
+    #       |             \
+    #       = < (N+-1) |        c       op(i) | N  >
+    #                iM   /__    iL,iI           iL
+    #                        iL
+    v0 = np.zeros(sctJ.d)
+    idwI = np.arange(sctI.dwn) * sctI.dup
+    idwJ = np.arange(sctJ.dwn) * sctJ.dup
+    for iupI in range(sctI.dup):
+        supI = sctI.states.up[iupI]
+        # Check for empty impurity
+        if check_occupation(supI, pos): continue
+        sgnJ, supJ = op(supI, pos)
+        iupJ = binsearch(sctJ.states.up, supJ)
+        iL = iupI + idwI
+        iM = iupJ + idwJ
+        v0[iM] = np.float64(sgnJ)*sctI.eigvecs[iL,iI]
+    return v0
+
+
 def build_gf_lanczos(H, V, espace, beta, mu=0.):
     """Build Green's function with exact diagonalization.
 
@@ -86,7 +116,7 @@ def build_gf_lanczos(H, V, espace, beta, mu=0.):
         #  \
         #  /
         # /____ l
-        for iI in np.ndindex(sctI.eigvals.size):
+        for iI in range(sctI.eigvals.size):
             exponent = np.exp(-beta*(sctI.eigvals[iI]-mu*(nupI+ndwI)))
             # N+1 (one more up spin)
             nupJ = nupI+1
@@ -95,22 +125,10 @@ def build_gf_lanczos(H, V, espace, beta, mu=0.):
             if nupJ <= n:
                 # Arrival sector
                 sctJ = espace.get((nupJ, ndwJ), None) or build_empty_sector(n, nupJ, ndwJ)
-                v0 = np.zeros(sctJ.d)
                 #             +
                 # < (N+1)l'| c(i)  | Nl >
                 #
-                idwI = np.arange(sctI.dwn) * sctI.dup
-                idwJ = np.arange(sctJ.dwn) * sctJ.dup
-                for iupI in range(sctI.dup):
-                    supI = sctI.states.up[iupI]
-                    # Check for empty impurity
-                    if supI&unsiged_dt(1): continue
-                    sgnJ, supJ = cdg(supI, 0)
-                    iupJ = binsearch(sctJ.states.up, supJ)
-                    iL = iupI + idwI
-                    iM = iupJ + idwJ
-                    v0[iM] = sgnJ*sctI.eigvecs[iL,iI]
-
+                v0 = project(iI, 0, cdg, check_full, sctI, sctJ)
                 matvec = matvec_operator(
                     *build_mb_ham(H, V, sctJ.states.up, sctJ.states.dw)
                 )
@@ -125,22 +143,10 @@ def build_gf_lanczos(H, V, espace, beta, mu=0.):
             if nupJ >= 0:
                 # Arrival sector
                 sctJ = espace.get((nupJ, ndwJ), None) or build_empty_sector(n, nupJ, ndwJ)
-                v0 = np.zeros(sctJ.d)
                 #
                 # < (N-1)l'| c(i)  | Nl >
                 #
-                idwI = np.arange(sctI.dwn) * sctI.dup
-                idwJ = np.arange(sctJ.dwn) * sctJ.dup
-                for iupI in range(sctI.dup):
-                    supI = sctI.states.up[iupI]
-                    # Check for occupied impurity
-                    if not supI&unsiged_dt(1): continue
-                    sgnJ, supJ = c(supI, 0)
-                    iupJ = binsearch(sctJ.states.up, supJ)
-                    iL = iupI + idwI
-                    iM = iupJ + idwJ
-                    v0[iM] = sgnJ*sctI.eigvecs[iL,iI]
-
+                v0 = project(iI, 0, c, check_empty, sctI, sctJ)
                 matvec = matvec_operator(
                     *build_mb_ham(H, V, sctJ.states.up, sctJ.states.dw)
                 )
