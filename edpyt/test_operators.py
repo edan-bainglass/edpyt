@@ -2,7 +2,9 @@ from operators import (
     fsgn,
     flip,
     c,
-    cdg
+    cdg,
+    check_full,
+    check_empty
 )
 
 import numpy as np
@@ -38,3 +40,17 @@ def test_fer_algebra():
     sgn2 = tsgn * fsgn
     #
     assert sgn1*f1 + sgn2*f2 == 0
+
+
+def test_check_full():
+
+    s = int("101101",base=2)
+    assert check_full(s, 0)
+    assert check_full(s, 2)
+
+def test_check_empty():
+
+    s = int("101101",base=2)
+    assert check_empty(s, 1)
+    assert check_empty(s, 4)
+    assert not check_empty(s, 3)

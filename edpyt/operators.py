@@ -68,3 +68,21 @@ def c(s, pos):
     assert s_out < s, "c error : c|0,...0_pos,>"
 
     return fermionic_sgn, s_out
+
+
+@njit(['int32(uint32,int64)',
+       'int32(uint32,int32)'])
+def check_full(s, pos):
+    """Particle count operator.
+
+    """
+    return (s>>pos)&unsiged_dt(1)
+
+
+@njit(['int32(uint32,int64)',
+       'int32(uint32,int32)'])
+def check_empty(s, pos):
+    """Hole count operator.
+
+    """
+    return not check_full(s, pos) #e(s>>pos)^unsiged_dt(1)
