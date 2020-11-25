@@ -7,8 +7,8 @@ stemr = get_lapack_funcs('stemr', dtype=np.float64)
 stemr_lwork = get_lapack_funcs('stemr_lwork', dtype=np.float64)
 
 
-egs_tridiag = lambda a, b: stebz(a,b,2,0.,1.,1,1,0.,'E')[1][0]
-
+egs_tridiag = lambda a, b: _solve_partial(a,b,eigvals_only=True)[0][0] #stebz(a,b,2,0.,1.,1,1,0.,'E')[1][0]
+gs_tridiag = lambda a, b: _solve_partial(a,b)
 
 def _solve_partial(a, b, select_range=(0,0), eigvals_only=False):
     il = select_range[0] + 1

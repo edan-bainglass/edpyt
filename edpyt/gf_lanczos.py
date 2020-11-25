@@ -1,5 +1,5 @@
 import numpy as np
-from numba import njit, typeof
+from numba import njit, prange, vectorize
 from multiprocessing import Pool
 
 from lookup import (
@@ -31,13 +31,18 @@ from lanczos import (
     build_sl_tridiag
 )
 
+from tridiag import (
+    eigh_tridiagonal,
+    gs_tridiag
+)
+
 from espace import (
     build_empty_sector
 )
 
+
 def continued_fraction(a, b):
     sz = a.size
-    # @njit
     def inner(e, eta, n=sz):
         if n==1:
             return b[sz-n] / (e + 1.j*eta - a[sz-n])
@@ -48,13 +53,27 @@ def continued_fraction(a, b):
     return inner
 
 
+def spectral(l, q):
+    @vectorize('complex64(float64,float64)',nopython=True)
+    def inner(e, eta):
+        res=0.+0.j
+        for i in prange(q.size):
+            res += q[i] / ( e + 1.j*eta - l[i] )
+        return res
+    return inner
+
+
+_reprs = ['cf','sp']
+
+
 class Gf:
-    def __init__(self):
+    def __init__(self, inner):
         self.funcs = []
         self.Z = np.inf
+        self.inner = inner
     def add(self, a, b):
         self.funcs.append(
-            continued_fraction(a, b)
+            self.inner(a, b)
         )
     def __call__(self, e, eta):
         out = np.sum([f(e, eta) for f in self.funcs], axis=0)
@@ -89,7 +108,43 @@ def project(iI, pos, op, check_occupation, sctI, sctJ):
     return v0
 
 
-def build_gf_lanczos(H, V, espace, beta, mu=0.):
+def build_gf_coeff_sp(a, b, Ei=0., exponent=1., sign=1):
+    """Returns Green function's coefficients for spectral.
+
+    """
+    #     ___               2
+    #     \             q[r]                  -(beta E)
+    # G =         -----------------------    e
+    #     /__ r    z - sign * (En[r]-Ei)
+    #
+    En, Un = eigh_tridiagonal(a, b[1:])
+    q = (Un[0] * b[0])**2 * exponent
+    En -= Ei
+    if sign<0:
+        En *= -1.
+    return En, q
+
+
+def build_gf_coeff_cf(a, b, Ei=0., exponent=1., sign=1):
+    """Returns Green function's coefficients for continued_fraction.
+
+    """
+    #     ___     -(beta E)         2
+    #     \      e                b0
+    # G =                -------------------        2
+    #     /__ r           z - sign * (a0-Ei) -    b1
+    #                                           ------
+    #                                           z - sign * (a1-Ei)
+    #
+    b **= 2
+    b[0] *= exponent
+    a -= Ei
+    if sign<0:
+        a *= -1.
+    return a, b
+
+
+def build_gf_lanczos(H, V, espace, beta, pos=0, mu=0., repr='cf'):
     """Build Green's function with exact diagonalization.
 
     """
@@ -103,7 +158,10 @@ def build_gf_lanczos(H, V, espace, beta, mu=0.):
     #            N,l,l'.
     #
     n = H.shape[0]
-    gf = Gf()
+    irepr =_reprs.index(repr)
+    gf_kernel = [continued_fraction, spectral][irepr]
+    build_gf_coeff = [build_gf_coeff_cf, build_gf_coeff_sp][irepr]
+    gf = Gf(gf_kernel)
     #  ____
     # \
     #  \
@@ -125,17 +183,15 @@ def build_gf_lanczos(H, V, espace, beta, mu=0.):
             if nupJ <= n:
                 # Arrival sector
                 sctJ = espace.get((nupJ, ndwJ), None) or build_empty_sector(n, nupJ, ndwJ)
-                #             +
-                # < (N+1)l'| c(i)  | Nl >
-                #
-                v0 = project(iI, 0, cdg, check_full, sctI, sctJ)
+                # < (N+1)l'| cdg(i)  | Nl >
+                v0 = project(iI, pos, cdg, check_full, sctI, sctJ)
                 matvec = matvec_operator(
                     *build_mb_ham(H, V, sctJ.states.up, sctJ.states.dw)
                 )
                 aJ, bJ = build_sl_tridiag(matvec, v0)
-                bJ **= 2
-                bJ[0] *= exponent
-                gf.add((aJ-sctI.eigvals[iI]), bJ)
+                gf.add(
+                    *build_gf_coeff(aJ, bJ, sctI.eigvals[iI], exponent)
+                )
             # N-1 (one more up spin)
             nupJ = nupI-1
             ndwJ = ndwI
@@ -143,17 +199,15 @@ def build_gf_lanczos(H, V, espace, beta, mu=0.):
             if nupJ >= 0:
                 # Arrival sector
                 sctJ = espace.get((nupJ, ndwJ), None) or build_empty_sector(n, nupJ, ndwJ)
-                #
                 # < (N-1)l'| c(i)  | Nl >
-                #
-                v0 = project(iI, 0, c, check_empty, sctI, sctJ)
+                v0 = project(iI, pos, c, check_empty, sctI, sctJ)
                 matvec = matvec_operator(
                     *build_mb_ham(H, V, sctJ.states.up, sctJ.states.dw)
                 )
                 aJ, bJ = build_sl_tridiag(matvec, v0)
-                bJ **= 2
-                bJ[0] *= exponent
-                gf.add(-(aJ-sctI.eigvals[iI]), bJ)
+                gf.add(
+                    *build_gf_coeff(aJ, bJ, sctI.eigvals[iI], exponent, sign=-1)
+                )
 
     # Partition function (Z)
     Z = sum(np.exp(-beta*(sct.eigvals-mu*(nup+ndw))).sum() for

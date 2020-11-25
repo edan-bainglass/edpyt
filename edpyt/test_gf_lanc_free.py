@@ -26,7 +26,7 @@ from sector import (
 """
 
 n = 11
-nup = 7
+nup = 5
 ndw = 6
 
 beta = 0.                # Zero Temperature
