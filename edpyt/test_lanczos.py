@@ -1,22 +1,49 @@
 import numpy as np
 
+from scipy.linalg import eigh_tridiagonal
+
 from lanczos import (
     build_sl_tridiag,
-    egs_tridiag
+    egs_tridiag,
+    eigh_tridiagonal,
+    sl_step
 )
 
-def test_build_sl_tridiag():
-    n = 30
-    d = np.random.random(n)
-    e = np.random.random(n-1)
-    mat = np.diag(d) + np.diag(e,1) + np.diag(e,-1)
-    mat += mat.T
-    mat /= 2
 
+n = 30
+d = np.random.random(n)
+e = np.random.random(n-1)
+mat = np.diag(d) + np.diag(e,1) + np.diag(e,-1)
+mat += mat.T
+mat /= 2
+
+
+def test_build_sl_tridiag_egs():
+    global n
+    v0 = np.random.random(n)
+    a, b = build_sl_tridiag(mat.dot, v0)
+
+    # TEST egs
     expected = np.linalg.eigvalsh(mat)[0]
-
-    a, b = build_sl_tridiag(mat.dot, np.random.random(n))
+    computed = egs_tridiag(a, b[1:])
     assert np.allclose(
         expected,
-        egs_tridiag(a, b[1:])
+        computed
+    )
+
+    # TEST gs
+    expected = np.linalg.eigh(mat)[1]
+
+    _, U = eigh_tridiagonal(a, b[1:])
+    computed = np.zeros((v0.size,a.size))
+
+    v = v0
+    l = np.zeros_like(v)
+    for n in range(a.size):
+        _, _, l, v = sl_step(mat.dot, v, l)
+        computed += l[:,None] * U[n][None,:]
+
+    assert np.allclose(
+        np.abs(expected[:,0]),
+        np.abs(computed[:,0])
     )

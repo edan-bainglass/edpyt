@@ -8,9 +8,44 @@ axpy = get_blas_funcs('axpy', dtype=np.float64)
 scal = get_blas_funcs('scal', dtype=np.float64)
 swap = get_blas_funcs('swap', dtype=np.float64)
 stebz = get_lapack_funcs('stebz', dtype=np.float64)
+stein = get_lapack_funcs('stein', dtype=np.float64)
+stemr = get_lapack_funcs('stemr', dtype=np.float64)
+stemr_lwork = get_lapack_funcs('stemr_lwork', dtype=np.float64)
 
 
 egs_tridiag = lambda a, b: stebz(a,b,2,0.,1.,1,1,0.,'E')[1][0]
+
+def gs_tridiag(a, b):
+    m, w, iblock, isplit, info = stebz(a,b,2,0.,1.,1,1,0.,'B')
+    v, info = stein(a,b,w[:m],iblock,isplit)
+    return v
+
+def eigh_tridiagonal(a, b):
+    b_ = np.empty(b.size+1, a.dtype)
+    b_[:-1] = b
+    lwork, liwork, info = stemr_lwork(a,b_,0,0.,1.,1,1,compute_v=True)
+    m, w, v, info = stemr(a,b_,0,0.,1.,1,1,compute_v=True,lwork=lwork,liwork=liwork)
+    return w, v
+
+def sl_step(matvec, v, l):
+    """Given the current (\tilde(v)) and previous (l) Lanc. vectors,
+    compute a single (simple) Lanc. step
+
+    Return:
+        a : <v+1|v>
+        b : <v|v>
+        v : |v> / b
+        v+1 : Av - av - bl
+
+    """
+    b = norm(v)
+    scal(1/b,v)
+    w = matvec(v)
+    a = v.dot(w)
+    # w -= (a[n] * v + b[n] * l)
+    axpy(v,w,v.size,-a)
+    axpy(l,w,l.size,-b)
+    return a, b, v, w
 
 
 def build_sl_tridiag(matvec, phi0, maxn=300, delta=1e-15, tol=1e-10, ND=10):
@@ -41,18 +76,10 @@ def build_sl_tridiag(matvec, phi0, maxn=300, delta=1e-15, tol=1e-10, ND=10):
     n = 0
     while not converged:
         for _ in range(ND):
-            b[n] = norm(v)
+            a[n], b[n], l, v = sl_step(matvec, v, l)
             if (abs(b[n])<delta) or (n>=maxn):
                 converged = True
                 break
-            scal(1/b[n],v)
-            w = matvec(v)
-            a[n] = v.dot(w)
-            # w -= (a[n] * v + b[n] * l)
-            axpy(v,w,v.size,-a[n])
-            axpy(l,w,l.size,-b[n])
-            l = v
-            v = w
             n += 1
         egs = egs_tridiag(a[:n],b[1:n])
         if abs(egs - egs_prev)<tol:
