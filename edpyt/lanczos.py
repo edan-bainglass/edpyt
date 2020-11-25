@@ -1,31 +1,15 @@
 import numpy as np
 from scipy.linalg import norm
 from scipy.linalg.blas import get_blas_funcs
-from scipy.linalg.lapack import get_lapack_funcs
 
+from tridiag import (
+    egs_tridiag
+)
 
 axpy = get_blas_funcs('axpy', dtype=np.float64)
 scal = get_blas_funcs('scal', dtype=np.float64)
 swap = get_blas_funcs('swap', dtype=np.float64)
-stebz = get_lapack_funcs('stebz', dtype=np.float64)
-stein = get_lapack_funcs('stein', dtype=np.float64)
-stemr = get_lapack_funcs('stemr', dtype=np.float64)
-stemr_lwork = get_lapack_funcs('stemr_lwork', dtype=np.float64)
 
-
-egs_tridiag = lambda a, b: stebz(a,b,2,0.,1.,1,1,0.,'E')[1][0]
-
-def gs_tridiag(a, b):
-    m, w, iblock, isplit, info = stebz(a,b,2,0.,1.,1,1,0.,'B')
-    v, info = stein(a,b,w[:m],iblock,isplit)
-    return v
-
-def eigh_tridiagonal(a, b):
-    b_ = np.empty(b.size+1, a.dtype)
-    b_[:-1] = b
-    lwork, liwork, info = stemr_lwork(a,b_,0,0.,1.,1,1,compute_v=True)
-    m, w, v, info = stemr(a,b_,0,0.,1.,1,1,compute_v=True,lwork=lwork,liwork=liwork)
-    return w, v
 
 def sl_step(matvec, v, l):
     """Given the current (\tilde(v)) and previous (l) Lanc. vectors,

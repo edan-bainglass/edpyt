@@ -1,12 +1,14 @@
 import numpy as np
 
-from scipy.linalg import eigh_tridiagonal
 
 from lanczos import (
     build_sl_tridiag,
+    sl_step
+)
+
+from tridiag import (
     egs_tridiag,
     eigh_tridiagonal,
-    sl_step
 )
 
 
