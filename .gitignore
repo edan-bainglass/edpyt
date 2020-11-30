@@ -3,3 +3,7 @@
 *.includecache
 *.so
 *.pyc
+*.ipynb
+*.txt
+*.npy
+ipynbs
