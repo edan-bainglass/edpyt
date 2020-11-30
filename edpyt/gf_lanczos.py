@@ -2,41 +2,41 @@ import numpy as np
 from numba import njit, prange, vectorize
 from multiprocessing import Pool
 
-from lookup import (
+from edpyt.lookup import (
     get_spin_indices,
     get_state_index,
     binsearch
 )
 
-from shared import (
+from edpyt.shared import (
     unsiged_dt
 )
 
-from operators import (
+from edpyt.operators import (
     cdg,
     c,
     check_full,
     check_empty
 )
 
-from matvec_product import (
+from edpyt.matvec_product import (
     matvec_operator
 )
 
-from build_mb_ham import (
+from edpyt.build_mb_ham import (
     build_mb_ham
 )
 
-from lanczos import (
+from edpyt.lanczos import (
     build_sl_tridiag
 )
 
-from tridiag import (
+from edpyt.tridiag import (
     eigh_tridiagonal,
     gs_tridiag
 )
 
-from espace import (
+from edpyt.espace import (
     build_empty_sector
 )
 

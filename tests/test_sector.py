@@ -1,6 +1,6 @@
 import numpy as np
 
-from sector import (
+from edpyt.sector import (
     generate_states
 )
 

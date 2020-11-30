@@ -5,7 +5,7 @@ from numba import njit
 from scipy.special import binom
 
 # Unsigned dtype
-from shared import (
+from edpyt.shared import (
     unsiged_dt
 )
 

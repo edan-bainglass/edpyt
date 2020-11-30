@@ -1,21 +1,21 @@
 import numpy as np
 from numba import vectorize, prange
 
-from espace import (
+from edpyt.espace import (
     build_espace
 )
 
-from lookup import (
+from edpyt.lookup import (
     get_spin_indices,
     get_state_index,
     binsearch
 )
 
-from shared import (
+from edpyt.shared import (
     unsiged_dt
 )
 
-from operators import (
+from edpyt.operators import (
     cdg
 )
 

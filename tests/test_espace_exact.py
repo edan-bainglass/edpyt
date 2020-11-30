@@ -1,6 +1,6 @@
 import numpy as np
 
-from espace import (
+from edpyt.espace import (
     build_espace,
 )
 

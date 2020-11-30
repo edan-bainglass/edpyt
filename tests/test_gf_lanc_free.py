@@ -1,22 +1,22 @@
 import numpy as np
 
-from gf_lanczos import (
+from edpyt.gf_lanczos import (
     build_gf_lanczos
 )
 
-from gf_exact import (
+from edpyt.gf_exact import (
     build_gf_exact
 )
 
-from espace import (
+from edpyt.espace import (
     build_espace
 )
 
-from lookup import (
+from edpyt.lookup import (
     get_sector_index
 )
 
-from sector import (
+from edpyt.sector import (
     get_sector_dim
 )
 
@@ -25,9 +25,9 @@ from sector import (
 
 """
 
-n = 11
-nup = 5
-ndw = 6
+n = 5
+nup = 2
+ndw = 3
 
 beta = 0.                # Zero Temperature
 eimp = - 2.              # Impurity level
@@ -60,7 +60,7 @@ def test_gf_lanczos_free():
     #                /           z - a(i)
     #               /____ i=0
     from matplotlib import pyplot as plt
-    from shared import params
+    from edpyt.shared import params
     params['hfmode'] = False
     params['mu'] = 0.
 

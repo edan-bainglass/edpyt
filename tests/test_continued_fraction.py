@@ -1,6 +1,6 @@
 import numpy as np
 
-from gf_lanczos import (
+from edpyt.gf_lanczos import (
     continued_fraction
 )
 

@@ -2,7 +2,7 @@ import numpy as np
 from scipy.linalg import norm
 from scipy.linalg.blas import get_blas_funcs
 
-from tridiag import (
+from edpyt.tridiag import (
     egs_tridiag
 )
 
@@ -65,6 +65,9 @@ def build_sl_tridiag(matvec, phi0, maxn=300, delta=1e-15, tol=1e-10, ND=10):
                 converged = True
                 break
             n += 1
+        if n==1:
+            converged = True
+            break
         egs = egs_tridiag(a[:n],b[1:n])
         if abs(egs - egs_prev)<tol:
             converged = True

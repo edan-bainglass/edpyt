@@ -1,7 +1,7 @@
 import numpy as np
 import scipy
 
-import _psparse
+from edpyt import _psparse
 
 
 def test_psparse_UPmultiply():

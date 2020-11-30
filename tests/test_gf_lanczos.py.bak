@@ -1,18 +1,18 @@
 import numpy as np
 
-from gf_lanczos import (
+from edpyt.gf_lanczos import (
     build_gf_lanczos
 )
 
-from espace import (
+from edpyt.espace import (
     build_espace
 )
 
-from lookup import (
+from edpyt.lookup import (
     get_sector_index
 )
 
-from sector import (
+from edpyt.sector import (
     get_sector_dim
 )
 
@@ -40,7 +40,7 @@ V = V_(U,n)
 
 def test_build_gf_lanczos_hubchain():
     from matplotlib import pyplot as plt
-    from shared import params
+    from edpyt.shared import params
 
     params['hfmode'] = True
     params['mu'] = ed

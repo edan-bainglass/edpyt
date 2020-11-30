@@ -1,15 +1,15 @@
 import numpy as np
 from matplotlib import pyplot as plt
 
-from gf_lanczos import (
+from edpyt.gf_lanczos import (
     build_gf_lanczos
 )
 
-from espace import (
+from edpyt.espace import (
     build_espace
 )
 
-from lookup import (
+from edpyt.lookup import (
     get_sector_index
 )
 
@@ -29,9 +29,10 @@ def test_chain_atomic_limit():
     #  G  (z) =   - ---  |     --------   +     --------  |
     #   00           pi  |_    z + U/2          z - U/2  _|
     #
-    from shared import params
+    from edpyt.shared import params
     params['mu'] = 0.
     params['hfmode'] = True
+
     neig_sector = np.zeros((n+1)*(n+1))
     neig_sector[get_sector_index(n//2, n//2, n)] = 1
 

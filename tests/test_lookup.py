@@ -1,4 +1,4 @@
-from lookup import (
+from edpyt.lookup import (
     get_spin_indices
 )
 

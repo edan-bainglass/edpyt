@@ -1,12 +1,12 @@
 import numpy as np
 
 
-from lanczos import (
+from edpyt.lanczos import (
     build_sl_tridiag,
     sl_step
 )
 
-from tridiag import (
+from edpyt.tridiag import (
     egs_tridiag,
     eigh_tridiagonal,
 )

@@ -1,10 +1,10 @@
 import numpy as np
 
-from build_mb_ham import (
+from edpyt.build_mb_ham import (
     build_mb_ham
 )
 
-from sector import (
+from edpyt.sector import (
     generate_states
 )
 
@@ -30,7 +30,7 @@ V = np.array([
 
 def test_build_mb_ham():
 
-    from shared import params
+    from edpyt.shared import params
     params['hfmode'] = False
     params['mu'] = 0.
 

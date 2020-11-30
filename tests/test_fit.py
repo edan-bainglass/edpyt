@@ -1,6 +1,6 @@
 import numpy as np
 
-from fit import (
+from edpyt.fit import (
     fit_hybrid
 )
 

@@ -2,7 +2,7 @@ import numpy as np
 from scipy.sparse import csr_matrix
 import time
 
-from matvec_product import (
+from edpyt.matvec_product import (
     matvec_operator
 )
 

@@ -1,6 +1,6 @@
 import numpy as np
 
-from gf_exact import (
+from edpyt.gf_exact import (
     build_gf_exact,
 )
 
@@ -40,7 +40,7 @@ def test_build_gf_exact():
 
 def test_phs():
     # Test particle hole symmetry
-    from shared import params
+    from edpyt.shared import params
 
     t = 0.1
     H = H_(ed,t)

@@ -1,4 +1,4 @@
-from operators import (
+from edpyt.operators import (
     fsgn,
     flip,
     c,

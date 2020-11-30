@@ -2,7 +2,7 @@ import numpy as np
 from numba import njit, types
 
 # Unsigned dtype
-from shared import (
+from edpyt.shared import (
     unsiged_dt
 )
 

@@ -4,22 +4,22 @@ from scipy import linalg as la
 from scipy.sparse import linalg as sla
 from collections import namedtuple, defaultdict
 
-from sector import (
+from edpyt.sector import (
     generate_states,
     get_sector_dim
 )
 
-from build_mb_ham import (
+from edpyt.build_mb_ham import (
     build_mb_ham
 )
 
 
-from matvec_product import (
+from edpyt.matvec_product import (
     todense,
     matvec_operator
 )
 
-from lookup import (
+from edpyt.lookup import (
     get_sector_index
 )
 

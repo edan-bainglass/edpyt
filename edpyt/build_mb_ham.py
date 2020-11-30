@@ -9,23 +9,23 @@ from scipy.sparse import (
     csr_matrix
 )
 
-from sector import (
+from edpyt.sector import (
     generate_states,
     binom
 )
 
-from lookup import (
+from edpyt.lookup import (
     binsearch,
     get_spin_indices,
     count_bits
 )
 
-from shared import (
+from edpyt.shared import (
     unsiged_dt,
     params
 )
 
-from operators import (
+from edpyt.operators import (
     flip,
     fsgn,
     c,

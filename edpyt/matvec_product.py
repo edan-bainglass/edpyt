@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.sparse.linalg.interface import LinearOperator
-import _psparse
+from edpyt import _psparse
 
 from scipy.sparse import (
     # kronsum(A_mm, B_nn) = kron(I_n,A) + kron(B,I_m)
