@@ -45,10 +45,11 @@ def solve_sector(H, V, states_up, states_dw, k=None):
     """Diagonalize sector.
 
     """
-    if k < (states_up.size*states_dw.size):
-        eigvals, eigvecs = _solve_arpack(H, V, states_up, states_dw, k)
-    else:
+    d = states_up.size*states_dw.size
+    if (k is None) or (d <= 10):
         eigvals, eigvecs = _solve_lapack(H, V, states_up, states_dw)
+    else:
+        eigvals, eigvecs = _solve_arpack(H, V, states_up, states_dw, k)
     return eigvals, eigvecs
 
 
@@ -91,9 +92,7 @@ def build_espace(H, V, neig_sector=None, cutoff=np.inf):
     if neig_sector is None:
         neig_sector = np.zeros((n+1)*(n+1),int)
         for nup, ndw in np.ndindex(n+1,n+1):
-            neig_sector[
-                get_sector_index(nup,ndw,n)
-            ] = get_sector_dim(n,nup)*get_sector_dim(n,ndw)
+            neig_sector[get_sector_index(nup,ndw,n)] = get_sector_dim(n,nup,ndw)
 
     # Fill in eigen states in eigen space
     egs = np.inf
@@ -120,3 +119,24 @@ def build_espace(H, V, neig_sector=None, cutoff=np.inf):
             egs = min(eigvals.min(), egs)
 
     return espace, egs
+
+
+def screen_espace(espace, egs, beta=1e6, cutoff=1e-9):
+    """Keep sectors containing relevant eigen-states:
+    any{ exp( -beta * (E(N)-egs) ) } > cutoff. If beta
+    is > ~1e3, then only the GS is kept.
+
+    """
+    delete = []
+    for (nup, ndw), sct in espace.items():
+        diff = np.exp(-beta*(sct.eigvals-egs)) > cutoff
+        if diff.any():
+            if (sct.eigvecs.ndim<2): continue
+            keep_idx = np.where(diff)
+            sct.eigvals = sct.eigvals[keep_idx]
+            sct.eigvecs = sct.eigvecs[:,keep_idx]
+        else:
+            delete.append((nup,ndw))
+
+    for k in delete:
+        espace.pop(k)

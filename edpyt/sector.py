@@ -24,19 +24,19 @@ def permutations(states):
         states[i] = x
 
 # @njit('int64(int64,int64)')
-def get_sector_dim(n, p):
+def get_sector_dim(n, nup, ndw):
     """Get sector dimension.
 
     """
     # return binom(n, p)
-    return int(binom(n, p))
+    return int(binom(n, nup)*binom(n, ndw))
 
 # @njit('uint32[:](int64,int64)')
 def generate_states(n, p):
     """Generate states in sector.
 
     """
-    num_states = get_sector_dim(n, p)
+    num_states = int(binom(n, p))
     states = np.zeros(num_states,dtype=unsiged_dt)
     initial = unsiged_dt((1<<p)-1)
     states[0] = initial
