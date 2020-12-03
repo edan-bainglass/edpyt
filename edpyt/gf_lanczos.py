@@ -144,16 +144,16 @@ def build_gf_coeff_cf(a, b, Ei=0., exponent=1., sign=1):
     return a, b
 
 
-def build_gf_lanczos(H, V, espace, beta, pos=0, mu=0., repr='cf'):
+def build_gf_lanczos(H, V, espace, beta, egs=0., pos=0, mu=0., repr='cf'):
     """Build Green's function with exact diagonalization.
 
     """
     #
     #             ______
-    #             \                              _                                                      +               _
-    #         1    \            (-beta E(N)l)   |      | < (N-1)l'| c(i)  | Nl > |        | < (N+1)l'| c(i)  | Nl > |    |
-    # G  =   ---               e                |    ------------------------------  +  ------------------------------   |
-    # ii      Z    /                            |_     iw   - ( E(N)l - E(N-1)l' )        iw   - ( E(N+1)l' - E(N)l )   _|
+    #             \                                      _                                                      +               _
+    #         1    \            (-beta (E(N)l - E0))    |      | < (N-1)l'| c(i)  | Nl > |        | < (N+1)l'| c(i)  | Nl > |    |
+    # G  =   ---               e                        |    ------------------------------  +  ------------------------------   |
+    # ii      Z    /                                    |_     iw   - ( E(N)l - E(N-1)l' )        iw   - ( E(N+1)l' - E(N)l )   _|
     #             /_____
     #            N,l,l'.
     #
@@ -175,7 +175,7 @@ def build_gf_lanczos(H, V, espace, beta, pos=0, mu=0., repr='cf'):
         #  /
         # /____ l
         for iI in range(sctI.eigvals.size):
-            exponent = np.exp(-beta*(sctI.eigvals[iI]-mu*(nupI+ndwI)))
+            exponent = np.exp(-beta*(sctI.eigvals[iI]-egs))
             # N+1 (one more up spin)
             nupJ = nupI+1
             ndwJ = ndwI
@@ -210,7 +210,7 @@ def build_gf_lanczos(H, V, espace, beta, pos=0, mu=0., repr='cf'):
                 )
 
     # Partition function (Z)
-    Z = sum(np.exp(-beta*(sct.eigvals-mu*(nup+ndw))).sum() for
+    Z = sum(np.exp(-beta*(sct.eigvals-egs)).sum() for
         (nup, ndw), sct in espace.items())
     gf.Z = Z
 
