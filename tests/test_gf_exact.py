@@ -29,14 +29,16 @@ def test_build_gf_exact():
     # Test against atomic limit
     H = H_(ed,t)
     V = V_(U)
-    gf = build_gf_exact(H, V, beta=beta, mu=mu)
+    beta = 100
+    gf = build_gf_exact(H, V, beta=100, mu=mu)
 
     eta = 1e-3
     energies = 10*np.random.random(20) - 5
 
     # https://www.cond-mat.de/events/correl20/manuscripts/pavarini.pdf
-    expected = 0.5*(1/(energies+1.j*eta+0.5*U)+1/(energies+1.j*eta-0.5*U))
-    assert np.allclose(expected, gf(energies, eta))
+    vus = (2*np.arange(50)+1)*np.pi/beta
+    expected = 0.5*(1/(1.j*vus+0.5*U)+1/(1.j*vus-0.5*U))
+    assert np.allclose(expected, gf(0., vus))
 
 def test_phs():
     # Test particle hole symmetry
