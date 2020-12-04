@@ -56,12 +56,9 @@ def continued_fraction(a, b):
 
 
 def spectral(l, q):
-    @vectorize('complex64(float64,float64)',nopython=True)
     def inner(e, eta):
-        res=0.+0.j
-        for i in prange(q.size):
-            res += q[i] / ( e + 1.j*eta - l[i] )
-        return res
+        z = e + 1.j*eta
+        return np.einsum('i,ki',q,np.reciprocal(z[:,None]-l[None,:]))
     return inner
 
 
@@ -193,19 +190,17 @@ def build_gf_lanczos(H, V, espace, beta, egs=0., pos=0, mu=0., repr='cf'):
     #    N -> I
     #  N+1 -> J
     #    l -> iI
-    #  ____
+    #  __
     # \
-    #  \
-    #  /
-    # /____ N,l
+    #
+    # /__ N,l
     # for l in range(sctI.eigvals.size)
     for nupI, ndwI in espace.keys():
         sctI = espace[(nupI,ndwI)]
-        #  ____
+        #  __
         # \
-        #  \
-        #  /
-        # /____ l
+        #
+        # /__ l
         exponents = np.exp(-beta*(sctI.eigvals-egs))
         # N+1 (one more up spin)
         nupJ = nupI+1
