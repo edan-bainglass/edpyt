@@ -1,7 +1,7 @@
 import numpy as np
 from mpi4py import MPI
 
-# from edpyt.dedlib import DED
+from edpyt.dedlib import DED
 
 lorentz = lambda z: 1/np.pi * (0.15)/(z**2+0.15**2) #Gamma==0.3
 

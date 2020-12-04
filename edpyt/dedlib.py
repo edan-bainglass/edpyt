@@ -26,7 +26,7 @@ def cumsum(a):
     for i in range(1,a.size):
         a[i] += a[i-1]
 
-
+#https://sciencehouse.wordpress.com/2015/06/20/sampling-from-a-probability-distribution/
 def get_random_sampler(p, lims, n=4, rng=_random):
     """Get random sampler for probability p.
 

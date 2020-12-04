@@ -9,15 +9,12 @@ from edpyt.gf_exact import (
 )
 
 from edpyt.espace import (
-    build_espace
+    build_espace,
+    screen_espace
 )
 
 from edpyt.lookup import (
     get_sector_index
-)
-
-from edpyt.sector import (
-    get_sector_dim
 )
 
 
@@ -64,17 +61,18 @@ def test_gf_lanczos_free():
     params['hfmode'] = False
     params['mu'] = 0.
 
-    neig_sector = np.zeros((n+1)*(n+1), int)
+    neig_sector = np.ones((n+1)*(n+1), int) * 3
 
-    neig_sector[
-        get_sector_index(nup, ndw, n)
-        ] = 5
-    neig_sector[
-        get_sector_index(ndw, nup, n)
-        ] = 5
+    # neig_sector[
+    #     get_sector_index(nup, ndw, n)
+    #     ] = 5
+    # neig_sector[
+    #     get_sector_index(ndw, nup, n)
+    #     ] = 5
 
     espace, egs = build_espace(H, V, neig_sector)
-    gf = build_gf_lanczos(H, V, espace, beta=0., mu=0.)
+    screen_espace(espace, egs, beta=1e3)
+    gf = build_gf_lanczos(H, V, espace, beta=1e3, egs=egs, mu=0.)
 
     eta = 0.25
     energies = np.arange(-10,10,1e-3)

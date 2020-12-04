@@ -3,6 +3,8 @@ from numba import njit
 from scipy import linalg as la
 from scipy.sparse import linalg as sla
 from collections import namedtuple, defaultdict
+from dataclasses import make_dataclass
+from dataclasses import replace as build_from_sector
 
 from edpyt.sector import (
     generate_states,
@@ -25,7 +27,8 @@ from edpyt.lookup import (
 
 
 States = namedtuple('States',['up','dw'])
-Sector = namedtuple('Sector',['states','d','dup','dwn','eigvals','eigvecs'])
+# Sector = namedtuple('Sector',['states','d','dup','dwn','eigvals','eigvecs'])
+Sector = make_dataclass('Sector',['states','d','dup','dwn','eigvals','eigvecs'])
 
 
 def build_empty_sector(n, nup, ndw):
@@ -132,7 +135,7 @@ def screen_espace(espace, egs, beta=1e6, cutoff=1e-9):
         diff = np.exp(-beta*(sct.eigvals-egs)) > cutoff
         if diff.any():
             if (sct.eigvecs.ndim<2): continue
-            keep_idx = np.where(diff)
+            keep_idx = np.where(diff)[0]
             sct.eigvals = sct.eigvals[keep_idx]
             sct.eigvecs = sct.eigvecs[:,keep_idx]
         else:
