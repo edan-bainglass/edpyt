@@ -8,7 +8,7 @@ from scipy.optimize import fsolve
 from scipy.interpolate import interp1d
 from scipy import fftpack
 
-from edpyt.espace import build_espace
+from edpyt.espace import build_espace, screen_espace
 from edpyt.gf_lanczos import build_gf_lanczos
 
 # Sampling
@@ -137,19 +137,6 @@ def get_occupation(vector, states_up, states_dw, n):
     return N
 
 
-def keep_gs(espace, egs):
-    """Keep sectors containing ground state.
-
-    """
-    delete = []
-    for (nup, ndw), sct in espace.items():
-        diff = np.abs(sct.eigvals[0]-egs) < 1e-7
-        if ~diff.any():
-            delete.append((nup,ndw))
-    for k in delete:
-        espace.pop(k)
-
-
 def build_siam(H, V, U, gfimp):
     """Build single Anderson Impurity model.
 
@@ -162,7 +149,7 @@ def build_siam(H, V, U, gfimp):
     V[0,0] = U
 
 
-def ded_solve(dos, z, sigma=None, sigma0=None, n=4, N=int(1e3), U=3., rng=np.random):
+def ded_solve(dos, z, sigma=None, sigma0=None, n=4, N=int(1e3), U=3., beta=1e6, rng=np.random):
     """Solve SIAM with DED.
 
     Args:
@@ -184,8 +171,11 @@ def ded_solve(dos, z, sigma=None, sigma0=None, n=4, N=int(1e3), U=3., rng=np.ran
     i) N0 # of GS particles with U==0
 
     """
-    _sigma = sigma or np.zeros_like(z)
-    _sigma0 = sigma0 or U/2.
+    return_sigma = False
+    if sigma is None:
+        sigma = np.zeros_like(z)
+        return_sigma = True
+    if sigma0 is None: sigma0 = U/2.
     H = np.zeros((n,n))
     V = np.zeros((n,n))
     neig = np.ones((n+1)*(n+1)) * 1
@@ -198,24 +188,24 @@ def ded_solve(dos, z, sigma=None, sigma0=None, n=4, N=int(1e3), U=3., rng=np.ran
             gfimp = build_gfimp(gf0)
             build_siam(H, V, 0., gfimp)
             espace, egs = build_espace(H, V, neig)
-            keep_gs(espace, egs)
-            sct = next(v for v in espace.values())
+            screen_espace(espace, egs, beta)
+            N0, sct = next((k,v) for k,v in espace.items() if abs(v.eigvals[0]-egs)<1e-7)
             if sct.eigvecs.ndim < 2: continue
             evec = sct.eigvecs[:,0]
-            N0 = get_occupation(evec,sct.states.up,sct.states.dw,n)
+            # N0 = get_occupation(evec,sct.states.up,sct.states.dw,n)
             V[0,0] = U
-            H[0,0] -= _sigma0
+            H[0,0] -= sigma0
             espace, egs = build_espace(H, V, neig)
-            keep_gs(espace, egs)
-            sct = next(v for v in espace.values())
+            screen_espace(espace, egs, beta)
+            Nv, sct = next((k,v) for k,v in espace.items() if abs(v.eigvals[0]-egs)<1e-7)
             evec = sct.eigvecs[:,0]
-            Nv = get_occupation(evec,sct.states.up,sct.states.dw,n)
+            # Nv = get_occupation(evec,sct.states.up,sct.states.dw,n)
             if np.allclose(Nv,N0):
-                gf = build_gf_lanczos(H, V, espace, 0.)
-                _sigma += np.reciprocal(gf0(z))-np.reciprocal(gf(z.real,z.imag))
+                gf = build_gf_lanczos(H, V, espace, beta, egs)
+                sigma += np.reciprocal(gf0(z))-np.reciprocal(gf(z.real,z.imag))
                 found = True
-    if sigma is None:
-        return _sigma
+    if return_sigma:
+        return sigma
 
 
 def smooth(energies, sigma, cutoff=2):

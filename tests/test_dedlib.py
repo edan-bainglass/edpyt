@@ -6,11 +6,11 @@ from edpyt.dedlib import (
     build_gfimp,
     build_siam,
     get_occupation,
-    keep_gs
 )
 
 from edpyt.espace import (
-    build_espace
+    build_espace,
+    screen_espace
 )
 
 from edpyt.gf_lanczos import (
@@ -27,7 +27,7 @@ def _setup(n):
     return gf0, gfimp
 
 def test_dedlib():
-    n = 4
+    n = 6
     H = np.zeros((n,n))
     V = np.zeros((n,n))
     gf0, gfimp = _setup(n)
@@ -49,6 +49,6 @@ def test_dedlib():
         np.testing.assert_allclose(N0, nup+ndw)
 
     # Test non-interacting Green's function.
-    keep_gs(espace, egs)
+    screen_espace(espace, egs, beta=1e4)
     gf = build_gf_lanczos(H, V, espace, 0.)
     np.testing.assert_allclose(gf(energies,0.02),gf0(energies+1.j*0.02))
