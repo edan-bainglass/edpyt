@@ -1,7 +1,8 @@
 import numpy as np
 from numba import njit
 from scipy import linalg as la
-from scipy.sparse import linalg as sla
+# from scipy.sparse import linalg as sla
+from edpyt import eigh_arpack as sla
 from collections import namedtuple, defaultdict
 from dataclasses import make_dataclass
 from dataclasses import replace as build_from_sector
@@ -73,7 +74,8 @@ def _solve_arpack(H, V, states_up, states_dw, k=6):
     matvec = matvec_operator(
         *build_mb_ham(H, V, states_up, states_dw)
     )
-    return sla.eigsh(matvec, k, which='SA')
+    return sla.eigsh(states_up.size*states_dw.size, k, matvec)
+    # return sla.eigsh(matvec, k, which='SA')
 
 
 def build_espace(H, V, neig_sector=None, cutoff=np.inf):

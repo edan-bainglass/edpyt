@@ -34,7 +34,7 @@ def matvec_operator(vec_diag, sp_mat_up, sp_mat_dw):
         _psparse.UPmultiply(sp_mat_up,vec,res)
         _psparse.DWmultiply(sp_mat_dw,vec,res)
         return res
-    return LinearOperator((d,d), matvec, vec_diag.dtype)
+    return matvec #LinearOperator((d,d), matvec, vec_diag.dtype)
 
 
 def todense(vec_diag, sp_mat_up, sp_mat_dw):
