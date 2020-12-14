@@ -8,3 +8,5 @@
 *.npy
 *.png
 ipynbs
+.vscode/settings.json
+tests/g0_atomic.png

@@ -10,6 +10,7 @@ from scipy import fftpack
 
 from edpyt.espace import build_espace, screen_espace
 from edpyt.gf_lanczos import build_gf_lanczos
+from edpyt.operators import check_full
 
 # Sampling
 from numba import njit
@@ -114,26 +115,25 @@ def build_gfimp(gf0):
 
 
 @njit()
-def get_occupation(vector, states_up, states_dw, n):
+def get_occupation(vector, states_up, states_dw, pos):
     """Count particles in eigen-state vector (size=dup x dwn).
 
     """
     N = 0.
-    occps = vector**2
-    d = states_up.size*states_dw.size
     dup = states_up.size
     dwn = states_dw.size
+    occps = (vector**2).reshape(dwn, dup)
 
-    for i in range(d):
-        iup = i%dup
-        idw = i//dup
+    for iup in range(dup):
         sup = states_up[iup]
+        if check_full(sup, pos):
+            N += occps[:,iup].sum()
+
+    for idw in range(dwn):
         sdw = states_dw[idw]
-        for j in range(0,n):
-            if (sup>>j)&np.uint32(1):
-                N += occps[i]
-            if (sdw>>j)&np.uint32(1):
-                N += occps[i]
+        if check_full(sdw, pos):
+            N += occps[idw,:].sum()
+
     return N
 
 
@@ -149,7 +149,7 @@ def build_siam(H, V, U, gfimp):
     V[0,0] = U
 
 
-def ded_solve(dos, z, sigma=None, sigma0=None, n=4, N=int(1e3), U=3., beta=1e6, rng=np.random):
+def ded_solve(dos, z, sigma=None, sigma0=None, n=4, N=int(1e3), U=3., beta=1e6, rng=np.random, return_imp_occp=False):
     """Solve SIAM with DED.
 
     Args:
@@ -175,7 +175,9 @@ def ded_solve(dos, z, sigma=None, sigma0=None, n=4, N=int(1e3), U=3., beta=1e6, 
     if sigma is None:
         sigma = np.zeros_like(z)
         return_sigma = True
-    if sigma0 is None: sigma0 = U/2.
+    if sigma0 is None: sigma0 = U/2. # chemical potential
+    imp_occp0 = 0.                   # non-interacting impurity occupation
+    imp_occp1 = 0.                   # interacting impurity occupation
     H = np.zeros((n,n))
     V = np.zeros((n,n))
     neig = np.ones((n+1)*(n+1)) * 1
@@ -192,20 +194,29 @@ def ded_solve(dos, z, sigma=None, sigma0=None, n=4, N=int(1e3), U=3., beta=1e6, 
             N0, sct = next((k,v) for k,v in espace.items() if abs(v.eigvals[0]-egs)<1e-7)
             if sct.eigvecs.ndim < 2: continue
             evec = sct.eigvecs[:,0]
-            # N0 = get_occupation(evec,sct.states.up,sct.states.dw,n)
+            occp0 = get_occupation(evec,sct.states.up,sct.states.dw,0)
             V[0,0] = U
             H[0,0] -= sigma0
             espace, egs = build_espace(H, V, neig)
             screen_espace(espace, egs, beta)
-            Nv, sct = next((k,v) for k,v in espace.items() if abs(v.eigvals[0]-egs)<1e-7)
+            N1, sct = next((k,v) for k,v in espace.items() if abs(v.eigvals[0]-egs)<1e-7)
             evec = sct.eigvecs[:,0]
-            # Nv = get_occupation(evec,sct.states.up,sct.states.dw,n)
-            if np.allclose(Nv,N0):
+            occp1 = get_occupation(evec,sct.states.up,sct.states.dw,0)
+            if np.allclose(N1,N0):
                 gf = build_gf_lanczos(H, V, espace, beta, egs)
                 sigma += np.reciprocal(gf0(z))-np.reciprocal(gf(z.real,z.imag))
                 found = True
+                imp_occp0 += occp0
+                imp_occp1 += occp1
+    sigma /= N
+    imp_occp0 /= N
+    imp_occp1 /= N
     if return_sigma:
+        if return_imp_occp:
+            return sigma, imp_occp0, imp_occp1
         return sigma
+    if return_imp_occp:
+        return imp_occp0, imp_occp1
 
 
 def smooth(energies, sigma, cutoff=2):

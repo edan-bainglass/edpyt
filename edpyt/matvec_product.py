@@ -22,9 +22,9 @@ def matvec_operator(vec_diag, sp_mat_up, sp_mat_dw):
             Returns returns H * v.
 
     """
-    dup = sp_mat_up.shape[0]
-    dwn = sp_mat_dw.shape[0]
-    d = dup*dwn
+    # dup = sp_mat_up.shape[0]
+    # dwn = sp_mat_dw.shape[0]
+    # d = dup*dwn
     # sp_diag = sp_diag_matrix(vec_diag)
     # op = sp_diag + kronsum(sp_mat_up, sp_mat_dw)
     def matvec(vec):

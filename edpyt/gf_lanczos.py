@@ -1,46 +1,18 @@
-import numpy as np
-from numba import njit, prange, vectorize
 from multiprocessing import Pool
 
-from edpyt.lookup import (
-    get_spin_indices,
-    get_state_index,
-    binsearch
-)
+import numpy as np
+from numba import njit, prange, vectorize
 
-from edpyt.shared import (
-    unsiged_dt
-)
-
-from edpyt.operators import (
-    cdg,
-    c,
-    check_full as not_full,
-    check_empty as not_empty
-)
-
-from edpyt.matvec_product import (
-    matvec_operator
-)
-
-from edpyt.build_mb_ham import (
-    build_mb_ham
-)
-
-from edpyt.lanczos import (
-    build_sl_tridiag
-)
-
-from edpyt.tridiag import (
-    eigh_tridiagonal,
-    gs_tridiag
-)
-
-from edpyt.espace import (
-    build_empty_sector,
-    build_from_sector,
-    solve_sector
-)
+from edpyt.build_mb_ham import build_mb_ham
+from edpyt.espace import build_empty_sector, build_from_sector, solve_sector
+from edpyt.lanczos import build_sl_tridiag
+from edpyt.lookup import binsearch, get_spin_indices, get_state_index
+from edpyt.matvec_product import matvec_operator
+from edpyt.operators import c, cdg
+from edpyt.operators import check_empty as not_empty
+from edpyt.operators import check_full as not_full
+from edpyt.shared import unsiged_dt
+from edpyt.tridiag import eigh_tridiagonal, gs_tridiag
 
 
 def continued_fraction(a, b):

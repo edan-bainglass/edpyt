@@ -26,6 +26,7 @@ def _setup(n):
     gfimp = build_gfimp(gf0)
     return gf0, gfimp
 
+
 def test_dedlib():
     n = 6
     H = np.zeros((n,n))
@@ -45,7 +46,9 @@ def test_dedlib():
             evec = sct.eigvecs[:,0]
         except IndexError:
             evec = sct.eigvecs
-        N0 = get_occupation(evec,sct.states.up,sct.states.dw,n)
+        N0 = 0.
+        for pos in range(n):
+            N0 += get_occupation(evec,sct.states.up,sct.states.dw,pos)
         np.testing.assert_allclose(N0, nup+ndw)
 
     # Test non-interacting Green's function.
