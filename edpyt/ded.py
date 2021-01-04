@@ -14,7 +14,7 @@ from matplotlib import pyplot as plt
 
 from edpyt.espace import build_espace
 from edpyt.gf_lanczos import build_gf_lanczos
-from edpyt.dedlib import ded_solve, smooth, get_random_sampler
+from edpyt.dedlib import ded_solve, smooth
 
 import random
 import logging
@@ -28,8 +28,6 @@ def lorentzian_function(gamma, z0):
     inner.gamma = gamma
     return inner
 
-e0 = 0.
-dos = lorentzian_function(2*0.3, e0)
 #dos = pickle.load(open('dos_interp.pckl','rb'))
 eta = 0.02
 energies = np.load('/home/gag/Projects/lorentz_ded/data/mesh_pm5.npy')
@@ -41,12 +39,13 @@ comm = MPI.COMM_WORLD
 rank = comm.Get_rank()
 size = comm.Get_size()
 
-N = int(1e4)
+N = 5 #int(5e3)
 U = 3.
 
 tol = 1e-3
-max_it = 1 #20
+max_it = 2
 sigma0 = U/2.
+ed = -2
 
 if rank==0:
     import sys
@@ -63,7 +62,7 @@ def init_rng(rng, seed, N):
     for _ in range(N):
         rng.random()
 #consider 50% success, consume x2 sequence lenght xn poles
-n = 2
+n = 4
 my_start = 2*n*(N//size)*rank 
 
 ss = np.random.SeedSequence(entropy=235693412236239200271790666654757833939)
@@ -94,13 +93,14 @@ eps = tol + 1.
 w[0] -= 1. # nonsym lims random sampler.
 while (it<max_it) and (abs(eps)>tol):
 
+    dos = lorentzian_function(2*0.3, ed+sigma0)
     sigma = np.zeros(w.size+2, dtype=w.dtype)
     
     init_rng(random, seed, my_start)
     
     imp_occp0, imp_occp1 = ded_solve(
         dos, w, sigma=sigma[:-2], sigma0=sigma0, U=U, n=n,
-        N=my_N, beta=1e6, rng=random, return_imp_occp=True)
+        N=my_N, beta=1e6, rng=random)
     
     sigma[-2] = imp_occp0
     sigma[-1] = imp_occp1
@@ -119,7 +119,7 @@ while (it<max_it) and (abs(eps)>tol):
         eps = smooth(wr, sigma)(0.).real
         f.write(f'{sigma0:.5f} {eps:.5f} {imp_occp0:.5f} {imp_occp1:.5f}\n'); f.flush()
         np.save(rootdir/f'lorentz_sigma_{it}', sigma)
-        gf = 1 / (w -e0 -sigma + 0.3j)
+        gf = 1 / (w -ed -sigma -sigma0 + 0.3j)
         plt.plot(wr, -1/np.pi * gf.imag)
         plt.savefig(rootdir/f'lorentz_ded_{it}.png', dpi=300)
         plt.close()

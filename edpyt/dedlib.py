@@ -27,43 +27,42 @@ def cumsum(a):
     for i in range(1,a.size):
         a[i] += a[i-1]
 
-#https://sciencehouse.wordpress.com/2015/06/20/sampling-from-a-probability-distribution/
-def get_random_sampler(p, lims, n=4, rng=_random):
-    """Get random sampler for probability p.
 
-    Args:
-        p : (callable) probability distribution.
-        lims : bounds for sampling.
-        n : # of samples.
-        rng : random number generator.
-
-    Returns:
-        random_sampler : (callable)
-            Sample n randoms uniformely in range [lims[0],ilms[1]].
-
-    Example:
-        p = lambda x: x
-        x = np.linspace(0,1,1001,endpoint=True)
-        sampler = get_random_sampler(p, x, n=4)
-        sampler()
-        Out : array([0.68814168, 0.84116257, 0.95736033, 0.66379715])
-
-    """
-    eners = np.linspace(lims[0],lims[1],int(np.diff(lims)*1e5+1),endpoint=True)
-    cdf = p(eners)
-    cdf /= cdf.sum()
-    cumsum(cdf)
-    poles = np.empty(n)
-    def sampler():
+# https://sciencehouse.wordpress.com/2015/06/20/sampling-from-a-probability-distribution/
+class RandomSampler:
+    '''Random sampler for custum probability. 
+    
+    '''
+    def __init__(self, p, lims, n=4, rng=_random, nsamples=1e6):
+        '''
+        Args:
+            p : (callable) probability distribution.
+            lims : bounds for sampling.
+            n : # of samples.
+            rng : random number generator.
+            nsamples : # of cdf samples.
+        '''
+        self.eners = np.linspace(lims[0],lims[1],int(np.diff(lims)*nsamples+1),
+                                 endpoint=True)
+        cdf = p(self.eners)
+        cdf /= cdf.sum()
+        cumsum(cdf)
+        self.cdf = cdf
+        self.poles = np.empty(n)
+        self.rng = rng
+    
+    def __call__(self):
+        '''Sample n randoms uniformely distributed in range [lims[0],lims[1]].
+        
+        '''
+        n = self.poles.size
         for i in range(n):
-            poles[i] = eners[np.searchsorted(cdf, rng.random())]
-        poles.sort()
-        return poles
-    return sampler
+            self.poles[i] = self.eners[np.searchsorted(self.cdf, self.rng.random())]
+        self.poles.sort()
 
 
-def build_gf0(poles):
-    """Build non-interacting Green's function.
+class Gf0:
+    """Non-interacting Green's function.
 
     """
     #           __ n
@@ -71,47 +70,58 @@ def build_gf0(poles):
     # G (z)                  ---------
     #          /__ i = 0       z - poles
     #                                   i
-    n = poles.size
-    def gf0(z):
-        z = np.array(z, ndmin=1)
-        return 1/n * np.reciprocal(z[:,None]-poles[None,:]).sum(1)
-    gf0.poles = poles
-    gf0.n = poles.size
-    gf0.derivative = lambda z: np.sum(-1/(z-gf0.poles)**2)/gf0.n
-    return gf0
+    def __init__(self, rs):
+        '''
+        Args:
+            rs : RandomSampler instance.
+        '''
+        self.rs = rs
+        self.poles = self.rs.poles
+        self.n = self.poles.size
+
+    def sample(self):
+        self.rs()
+
+    def __call__(self, z):
+        return 1/self.n * np.reciprocal(z[:,None]-self.poles[None,:]).sum(1)
+    
+    def derivative(self, z0):
+        return np.sum(-1/(z0-self.poles)**2)/self.n
 
 
-def build_gfimp(gf0):
-    """Fit SAIM model.
+class Gfimp:
+    """Non-interacting Green's function of SIAM model.
 
-    Returns:
-        G(z) : (callable) impurity Green's function.
-        - G.ek = onsite bath energies.
-        - G.vk2 = imp-bath square hoppings.
-        - G.e0 = impurity energy level.
     """
     #
-    #  0      !     1
+    #  SIAM         1
     # G (z)   =  ----------  __ n-1           2
     #            z - e0 -    \               Vk
     #                                     -------
     #                        /__k = 0      z - ek
-    poles = gf0.poles
-    n = gf0.n
-    ek = np.zeros(n-1)
-    vk2 = np.zeros(n-1)
-    for i in range(n-1):
-        ek[i] = fsolve(gf0, (poles[i+1]+poles[i])/2)
-        vk2[i] = -1/gf0.derivative(ek[i])
-    e0 = poles.mean()
-    def gfimp(z):
-        z = np.array(z, ndmin=1)
-        delta = lambda z: vk2[None,:] * np.reciprocal(z[:,None]-ek[None,:])
-        return np.reciprocal(z-e0-delta(z).sum(1))
-    gfimp.e0 = e0
-    gfimp.ek = ek
-    gfimp.vk2 = vk2
-    return gfimp
+    def __init__(self, n):
+        self.ek = np.empty(n-1)
+        self.vk2 = np.empty(n-1)
+        self.e0 = 0.
+
+    def fit(self, gf0):
+        '''Fit non-interacting Green's function.
+
+             0    !  SIAM
+            G (z) = G   (z)
+        '''
+        poles = gf0.poles
+        n = poles.size
+        for i in range(n-1):
+            self.ek[i] = fsolve(gf0, (poles[i+1]+poles[i])/2)
+            self.vk2[i] = -1/gf0.derivative(self.ek[i])
+        self.e0 = poles.mean()
+
+    def delta(self, z):
+        return self.vk2[None,:] * np.reciprocal(z[:,None]-self.ek[None,:])
+
+    def __call__(self, z):
+        return np.reciprocal(z-self.e0-self.delta(z).sum(1))
 
 
 @njit()
@@ -149,7 +159,8 @@ def build_siam(H, V, U, gfimp):
     V[0,0] = U
 
 
-def ded_solve(dos, z, sigma=None, sigma0=None, n=4, N=int(1e3), U=3., beta=1e6, rng=np.random, return_imp_occp=False):
+def ded_solve(dos, z, sigma=None, sigma0=None, n=4, 
+              N=int(1e3), U=3., beta=1e6, rng=_random):
     """Solve SIAM with DED.
 
     Args:
@@ -180,19 +191,19 @@ def ded_solve(dos, z, sigma=None, sigma0=None, n=4, N=int(1e3), U=3., beta=1e6, 
     imp_occp1 = 0.                   # interacting impurity occupation
     H = np.zeros((n,n))
     V = np.zeros((n,n))
+    rs = RandomSampler(dos, [z.real[0],z.real[-1]], n, rng)
+    gf0 = Gf0(rs)
+    gfimp = Gfimp(n)
     neig = np.ones((n+1)*(n+1)) * 1
-    rs = get_random_sampler(dos, [z.real[0],z.real[-1]], n, rng)
     for _ in range(N):
         found = False
         while not found:
-            poles = rs()
-            gf0 = build_gf0(poles)
-            gfimp = build_gfimp(gf0)
+            gf0.sample()
+            gfimp.fit(gf0)
             build_siam(H, V, 0., gfimp)
             espace, egs = build_espace(H, V, neig)
             screen_espace(espace, egs, beta)
             N0, sct = next((k,v) for k,v in espace.items() if abs(v.eigvals[0]-egs)<1e-7)
-            if sct.eigvecs.ndim < 2: continue
             evec = sct.eigvecs[:,0]
             occp0 = get_occupation(evec,sct.states.up,sct.states.dw,0)
             V[0,0] = U
@@ -212,11 +223,8 @@ def ded_solve(dos, z, sigma=None, sigma0=None, n=4, N=int(1e3), U=3., beta=1e6, 
     imp_occp0 /= N
     imp_occp1 /= N
     if return_sigma:
-        if return_imp_occp:
             return sigma, imp_occp0, imp_occp1
-        return sigma
-    if return_imp_occp:
-        return imp_occp0, imp_occp1
+    return imp_occp0, imp_occp1
 
 
 def smooth(energies, sigma, cutoff=2):

@@ -1,9 +1,9 @@
 import numpy as np
 
 from edpyt.dedlib import (
-    get_random_sampler,
-    build_gf0,
-    build_gfimp,
+    RandomSampler,
+    Gf0,
+    Gfimp,
     build_siam,
     get_occupation,
 )
@@ -20,10 +20,11 @@ from edpyt.gf_lanczos import (
 lorentz = lambda z: 1/np.pi * (0.15)/(z**2+0.15**2) #Gamma==0.3
 
 def _setup(n):
-    rs = get_random_sampler(lorentz, [-5.,5.], n)
-    poles = rs()
-    gf0 = build_gf0(poles)
-    gfimp = build_gfimp(gf0)
+    rs = RandomSampler(lorentz, [-5.,5.], n)
+    gf0 = Gf0(rs)
+    gfimp = Gfimp(n)
+    gf0.sample()
+    gfimp.fit(gf0)
     return gf0, gfimp
 
 
