@@ -64,10 +64,10 @@ def test_gf_lanczos_free():
     neig_sector = np.ones((n+1)*(n+1), int) * 3
 
     # neig_sector[
-    #     get_sector_index(nup, ndw, n)
+    #     get_sector_index(n, nup, ndw)
     #     ] = 5
     # neig_sector[
-    #     get_sector_index(ndw, nup, n)
+    #     get_sector_index(n, ndw, nup)
     #     ] = 5
 
     espace, egs = build_espace(H, V, neig_sector)

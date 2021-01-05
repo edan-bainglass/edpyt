@@ -34,7 +34,7 @@ def test_chain_atomic_limit():
     params['hfmode'] = True
 
     neig_sector = np.zeros((n+1)*(n+1))
-    neig_sector[get_sector_index(n//2, n//2, n)] = 1
+    neig_sector[get_sector_index(n, n//2, n//2)] = 1
 
     espace, egs = build_espace(H, V, neig_sector)
     # Continued Fraction representation

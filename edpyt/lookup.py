@@ -86,7 +86,7 @@ def get_num_spins(isct, n):
 
 
 # @njit('int64(int64,int64,int64)')
-def get_sector_index(nup, ndw, n):
+def get_sector_index(n, nup, ndw):
     """Implements map (nup,ndw) -> isct
 
     """
