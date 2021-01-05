@@ -6,6 +6,7 @@ from edpyt import eigh_arpack as sla
 from collections import namedtuple, defaultdict
 from dataclasses import make_dataclass
 from dataclasses import replace as build_from_sector
+from itertools import product
 
 from edpyt.sector import (
     generate_states,
@@ -50,14 +51,16 @@ def solve_sector(H, V, states_up, states_dw, k=None):
 
     """
     d = states_up.size*states_dw.size
-    if (k is None) or (d <= 10):
-        eigvals, eigvecs = _solve_lapack(H, V, states_up, states_dw)
+    if k is None: k = d
+    if (k == d) or (d <= 10):
+        eigvals, eigvecs = _solve_lapack(H, V, states_up, states_dw, k)
+        if k<d: eigvals, eigvecs = eigvals[:k], eigvecs[:,:k]
     else:
         eigvals, eigvecs = _solve_arpack(H, V, states_up, states_dw, k)
     return eigvals, eigvecs
 
 
-def _solve_lapack(H, V, states_up, states_dw):
+def _solve_lapack(H, V, states_up, states_dw, k):
     """Diagonalize sector with LAPACK.
 
     """
@@ -97,7 +100,7 @@ def build_espace(H, V, neig_sector=None, cutoff=np.inf):
     if neig_sector is None:
         neig_sector = np.zeros((n+1)*(n+1),int)
         for nup, ndw in np.ndindex(n+1,n+1):
-            neig_sector[get_sector_index(nup,ndw,n)] = get_sector_dim(n,nup,ndw)
+            neig_sector[get_sector_index(n,nup,ndw)] = get_sector_dim(n,nup,ndw)
 
     # Fill in eigen states in eigen space
     egs = np.inf
@@ -105,7 +108,7 @@ def build_espace(H, V, neig_sector=None, cutoff=np.inf):
         states_up = generate_states(n, nup)
         for ndw in range(n+1):
             # Sequential index sector.
-            isct = get_sector_index(nup, ndw, n)
+            isct = get_sector_index(n,nup,ndw)
             if neig_sector[isct] == 0:
                 continue
             states_dw = generate_states(n, ndw)
@@ -126,17 +129,19 @@ def build_espace(H, V, neig_sector=None, cutoff=np.inf):
     return espace, egs
 
 
-def screen_espace(espace, egs, beta=1e6, cutoff=1e-9):
+def screen_espace(espace, egs, beta=1e6, cutoff=1e-9):#, neig_sector=None, n=0):
     """Keep sectors containing relevant eigen-states:
     any{ exp( -beta * (E(N)-egs) ) } > cutoff. If beta
     is > ~1e3, then only the GS is kept.
 
     """
+
     delete = []
     for (nup, ndw), sct in espace.items():
         diff = np.exp(-beta*(sct.eigvals-egs)) > cutoff
         if diff.any():
-            if (sct.eigvecs.ndim<2): continue
+            if (sct.eigvecs.ndim<2): 
+                raise RuntimeError('sct.eigvecs.ndim < 2!')
             keep_idx = np.where(diff)[0]
             sct.eigvals = sct.eigvals[keep_idx]
             sct.eigvecs = sct.eigvecs[:,keep_idx]
@@ -145,3 +150,50 @@ def screen_espace(espace, egs, beta=1e6, cutoff=1e-9):
 
     for k in delete:
         espace.pop(k)
+
+
+def adjust_neigsector(espace, neig, n):
+    """Adjust # of eigen-states to compute for each sector.
+    
+    WARNING: espace is assumed to have sorted keys.
+
+    RULES:
+        Increase if:
+            (i) # of eigen-states per sector is already
+                equal to neig to compute.
+
+        Decrease if:
+            (i) # of eigen-states per sector is less than
+                neig to compute.
+            (ii) sector is absent from espace.
+
+    """
+    def _increase(isct):
+        neig[isct] = min(
+            get_sector_dim(n,nup,ndw),
+            neig[isct]+1
+        )
+    def _decrease(isct):
+        neig[isct] = max(
+            1,
+            neig[isct]-1
+        )     
+
+    iter_keys = product(range(n+1),range(n+1))
+    for nup, ndw in espace.keys(): # ASSUME SORTED!
+        nup_, ndw_ = next(iter_keys)
+        # While sector is absent
+        while (nup != nup_) or (ndw != ndw_):
+            isct = get_sector_index(n,nup_,ndw_)
+            _decrease(isct)
+            nup_, ndw_ = next(iter_keys)
+        isct = get_sector_index(n,nup_,ndw_)
+        eigvals_size = espace[(nup,ndw)].eigvals.size
+        if eigvals_size == neig[isct]:
+            _increase(isct)
+        elif eigvals_size <  neig[isct]:
+            _decrease(isct)
+    # All (nup_,ndw_) pairs larger than max {(nup,ndw)}
+    for nup_, ndw_ in iter_keys:    
+        isct = get_sector_index(n,nup_,ndw_)
+        _decrease(isct)

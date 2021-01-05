@@ -47,10 +47,11 @@ max_it = 2
 sigma0 = U/2.
 ed = -2
 
+import sys
+from pathlib import Path
+rootdir=Path(sys.argv[1]) if len(sys.argv)>1 else Path.cwd()
+
 if rank==0:
-    import sys
-    from pathlib import Path
-    rootdir=Path(sys.argv[1]) if len(sys.argv)>1 else Path.cwd()
     rootdir.mkdir(parents=True,exist_ok=True)
     f=open(rootdir/'lorentz_sigma0.txt','w')
 
@@ -68,7 +69,7 @@ my_start = 2*n*(N//size)*rank
 ss = np.random.SeedSequence(entropy=235693412236239200271790666654757833939)
 seed = ss.generate_state(1)[0]
 
-logging.basicConfig(filename='ded.log', 
+logging.basicConfig(filename=rootdir/'ded.log', 
                     filemode='a',
                     format=f"[{rank}] %(levelname)s %(message)s",
                     level=logging.INFO)
