@@ -194,8 +194,8 @@ def ded_solve(dos, z, sigma=None, sigma0=None, n=4,
     rs = RandomSampler(dos, [z.real[0],z.real[-1]], n, rng)
     gf0 = Gf0(rs)
     gfimp = Gfimp(n)
-    neig1 = np.ones((n+1)*(n+1),int) * 3
-    neig0 = np.ones((n+1)*(n+1),int) * 3
+    neig1 = None #np.ones((n+1)*(n+1),int) * 3
+    neig0 = None #np.ones((n+1)*(n+1),int) * 3
     for _ in range(N):
         found = False
         while not found:
@@ -204,7 +204,7 @@ def ded_solve(dos, z, sigma=None, sigma0=None, n=4,
             build_siam(H, V, 0., gfimp)
             espace, egs = build_espace(H, V, neig0)
             screen_espace(espace, egs, beta)
-            adjust_neigsector(espace, neig0, n)
+            # adjust_neigsector(espace, neig0, n)
             N0, sct = next((k,v) for k,v in espace.items() if abs(v.eigvals[0]-egs)<1e-7)
             evec = sct.eigvecs[:,0]
             occp0 = get_occupation(evec,sct.states.up,sct.states.dw,0)
@@ -212,7 +212,7 @@ def ded_solve(dos, z, sigma=None, sigma0=None, n=4,
             H[0,0] -= sigma0
             espace, egs = build_espace(H, V, neig1)
             screen_espace(espace, egs, beta)
-            adjust_neigsector(espace, neig1, n)
+            # adjust_neigsector(espace, neig1, n)
             N1, sct = next((k,v) for k,v in espace.items() if abs(v.eigvals[0]-egs)<1e-7)
             evec = sct.eigvecs[:,0]
             occp1 = get_occupation(evec,sct.states.up,sct.states.dw,0)
