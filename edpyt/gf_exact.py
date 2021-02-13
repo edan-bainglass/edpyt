@@ -43,7 +43,7 @@ def project_exact(pos, sctI, sctJ):
     #          0           /         i',j  i,k     \/                       0
     #                     /____ i'i
     #                           (lattice sites)
-    v0 = np.zeros((sctJ.d,sctI.eigvals.size))
+    v0 = np.zeros((sctJ.eigvals.size,sctI.eigvals.size))
     idwI = np.arange(sctI.dwn) * sctI.dup
     idwJ = np.arange(sctJ.dwn) * sctJ.dup #idwJ.size=idwI.size
     for iupI in range(sctI.dup):
