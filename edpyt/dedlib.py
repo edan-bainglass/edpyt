@@ -9,7 +9,7 @@ from scipy.interpolate import interp1d
 from scipy import fftpack
 
 from edpyt.espace import build_espace, screen_espace, adjust_neigsector
-from edpyt.gf_lanczos import build_gf_lanczos
+from edpyt.gf_exact import build_gf_exact
 from edpyt.operators import check_full
 
 # Sampling
@@ -203,7 +203,7 @@ def ded_solve(dos, z, sigma=None, sigma0=None, n=4,
             gfimp.fit(gf0)
             build_siam(H, V, 0., gfimp)
             espace, egs = build_espace(H, V, neig0)
-            screen_espace(espace, egs, beta)
+            # screen_espace(espace, egs, beta)
             # adjust_neigsector(espace, neig0, n)
             N0, sct = next((k,v) for k,v in espace.items() if abs(v.eigvals[0]-egs)<1e-7)
             evec = sct.eigvecs[:,0]
@@ -211,13 +211,13 @@ def ded_solve(dos, z, sigma=None, sigma0=None, n=4,
             V[0,0] = U
             H[0,0] -= sigma0
             espace, egs = build_espace(H, V, neig1)
-            screen_espace(espace, egs, beta)
+            # screen_espace(espace, egs, beta)
             # adjust_neigsector(espace, neig1, n)
             N1, sct = next((k,v) for k,v in espace.items() if abs(v.eigvals[0]-egs)<1e-7)
             evec = sct.eigvecs[:,0]
             occp1 = get_occupation(evec,sct.states.up,sct.states.dw,0)
             if np.allclose(N1,N0):
-                gf = build_gf_lanczos(H, V, espace, beta, egs)
+                gf = build_gf_exact(H, V, espace, beta, egs)
                 sigma += np.reciprocal(gf0(z))-np.reciprocal(gf(z.real,z.imag))
                 found = True
                 imp_occp0 += occp0

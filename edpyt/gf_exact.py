@@ -58,7 +58,7 @@ def project_exact(pos, sctI, sctJ):
     return v0
 
 
-def build_gf_exact(H, V, beta, pos=0, mu=0.):
+def build_gf_exact(H, V, espace, beta, egs=0., pos=0):
     """Build Green's function with exact diagonalization.
 
     """
@@ -72,7 +72,7 @@ def build_gf_exact(H, V, beta, pos=0, mu=0.):
     #            N,N',l,l'.
     #
     n = H.shape[0]
-    espace, egs = build_espace(H, V)
+    # espace, egs = build_espace(H, V)
     lambdas = []
     qs = []
     #  ____
@@ -94,15 +94,15 @@ def build_gf_exact(H, V, beta, pos=0, mu=0.):
         #  \        < N'l'| c  | Nl > =  \          c     c    < N'm'| c  | Nn >
         #  /                 0           /           m,l'  n,l          0
         # /____ ll'                     /____ ll'mn
-        EI = (sctI.eigvals-mu*(nupI+ndwI))[None,:]
-        EJ = (sctJ.eigvals-mu*(nupJ+ndwJ))[:,None]
+        EI = (sctI.eigvals-egs)[None,:]
+        EJ = (sctJ.eigvals-egs)[:,None]
         exponents = np.exp(-beta*EJ) + np.exp(-beta*EI)
         bJ = project_exact(pos, sctI, sctJ)
         lambdas.extend((EJ - EI).flatten())
         qs.extend((bJ**2 * exponents).flatten())
 
     # Partition function (Z)
-    Z = sum(np.exp(-beta*(sct.eigvals-mu*(nup+ndw))).sum() for
+    Z = sum(np.exp(-beta*(sct.eigvals-egs)).sum() for
         (nup, ndw), sct in espace.items())
 
     qs = np.array(qs)/Z
