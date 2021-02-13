@@ -16,7 +16,7 @@ from edpyt.shared import (
 )
 
 from edpyt.operators import (
-    cdg
+    cdg, check_full
 )
 
 
@@ -24,7 +24,7 @@ def Gf(q, l):
     """Green's function kernel wrapper.
 
     """
-    @vectorize('complex64(float64,float64)',nopython=True)
+    # @vectorize('complex64(float64,float64)',nopython=True)
     def inner(e, eta):
         res=0.+0.j
         for i in prange(q.size):
@@ -33,7 +33,32 @@ def Gf(q, l):
     return inner
 
 
-def build_gf_exact(H, V, beta, mu=0.):
+def project_exact(pos, sctI, sctJ):
+    """Project states of sector sctI onto eigenbasis of sector sctJ.
+
+    """
+    #                      ____
+    #          +          \
+    # < N'j| c  | Nk > =   \        a     a     , \__/ i',i  | N'i' >  =  op  | Ni >
+    #          0           /         i',j  i,k     \/                       0
+    #                     /____ i'i
+    #                           (lattice sites)
+    v0 = np.zeros((sctJ.d,sctI.eigvals.size))
+    idwI = np.arange(sctI.dwn) * sctI.dup
+    idwJ = np.arange(sctJ.dwn) * sctJ.dup #idwJ.size=idwI.size
+    for iupI in range(sctI.dup):
+        supI = sctI.states.up[iupI]
+        # Check for empty impurity
+        if check_full(supI, pos): continue
+        sgnJ, supJ = cdg(supI, pos)
+        iupJ = binsearch(sctJ.states.up, supJ)
+        iL = iupI + idwI
+        iM = iupJ + idwJ
+        v0 += np.float64(sgnJ)*np.einsum('ij,ik->jk',sctJ.eigvecs[iM,:],sctI.eigvecs[iL,:])
+    return v0
+
+
+def build_gf_exact(H, V, beta, pos=0, mu=0.):
     """Build Green's function with exact diagonalization.
 
     """
@@ -64,35 +89,17 @@ def build_gf_exact(H, V, beta, mu=0.):
         if nupJ > n: continue
         # Arrival sector
         sctJ = espace[(nupJ,ndwJ)]
-        #  ____
-        # \
-        #  \
-        #  /
-        # /____ ll'
-        for iI, iJ in np.ndindex(sctI.d, sctJ.d):
-            residual = 0.
-            EI = sctI.eigvals[iI] - mu*(nupI+ndwI)
-            EJ = sctJ.eigvals[iJ] - mu*(nupJ+ndwJ)
-            exponent = np.exp(-beta*EI)+np.exp(-beta*EJ)
-            # if exponent<1e-9: continue
-            #                      ____
-            #          +          \                             +
-            # < N'l'| c  | Nl > =  \        c     c    < N'm'| c  | Nn >
-            #          0           /         m,l'  n,l          0
-            #                     /____ mn
-            for iL in range(sctI.d):
-                iupI, idwI = get_spin_indices(iL, sctI.dup, sctI.dwn)
-                supI = sctI.states.up[iupI]
-                sdwJ = sctI.states.dw[idwI]
-                # If not empty (imputiry)
-                if supI&unsiged_dt(1): continue
-                sgnJ, supJ = cdg(supI, 0)
-                iupJ = binsearch(sctJ.states.up, supJ)
-                idwJ = idwI
-                iM = get_state_index(iupJ, idwJ, sctJ.dup)
-                residual += sctJ.eigvecs[iM,iJ]*sgnJ*sctI.eigvecs[iL,iI]
-            lambdas.append(EJ - EI)
-            qs.append(residual**2 * exponent)
+        #  ____                          ____ 
+        # \                  +          \                               +
+        #  \        < N'l'| c  | Nl > =  \          c     c    < N'm'| c  | Nn >
+        #  /                 0           /           m,l'  n,l          0
+        # /____ ll'                     /____ ll'mn
+        EI = (sctI.eigvals-mu*(nupI+ndwI))[None,:]
+        EJ = (sctJ.eigvals-mu*(nupJ+ndwJ))[:,None]
+        exponents = np.exp(-beta*EJ) + np.exp(-beta*EI)
+        bJ = project_exact(pos, sctI, sctJ)
+        lambdas.extend((EJ - EI).flatten())
+        qs.extend((bJ**2 * exponents).flatten())
 
     # Partition function (Z)
     Z = sum(np.exp(-beta*(sct.eigvals-mu*(nup+ndw))).sum() for
