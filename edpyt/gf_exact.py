@@ -20,17 +20,29 @@ from edpyt.operators import (
 )
 
 
-def Gf(q, l):
-    """Green's function kernel wrapper.
+# def Gf(q, l):
+#     """Green's function kernel wrapper.
 
-    """
-    # @vectorize('complex64(float64,float64)',nopython=True)
-    def inner(e, eta):
+#     """
+#     # @vectorize('complex64(float64,float64)',nopython=True)
+#     def inner(e, eta):
+#         res=0.+0.j
+#         for i in prange(q.size):
+#             res += q[i] / ( e + 1.j*eta - l[i] )
+#         return res / Z
+#     return inner
+
+class Gf:
+    def __init__(self, q, l, Z):
+        self.q = np.asarray(q)
+        self.l = np.asarray(l)
+        self.Z = Z
+
+    def __call__(self, e, eta):
         res=0.+0.j
-        for i in prange(q.size):
-            res += q[i] / ( e + 1.j*eta - l[i] )
-        return res
-    return inner
+        for i in range(self.q.size):
+            res += self.q[i] / ( e + 1.j*eta - self.l[i] )
+        return res / self.Z
 
 
 def project_exact(pos, sctI, sctJ):
@@ -105,7 +117,8 @@ def build_gf_exact(H, V, espace, beta, egs=0., pos=0):
     Z = sum(np.exp(-beta*(sct.eigvals-egs)).sum() for
         (nup, ndw), sct in espace.items())
 
-    qs = np.array(qs)/Z
-    lambdas = np.array(lambdas)
+    # qs = np.array(qs)#/Z
+    # lambdas = np.array(lambdas)
+    gf = Gf(qs, lambdas, Z)
 
-    return Gf(qs, lambdas)
+    return gf#Gf(qs, lambdas)

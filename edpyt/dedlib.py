@@ -214,14 +214,14 @@ def ded_solve(dos, z, sigma=None, sigma0=None, n=4,
             # screen_espace(espace, egs, beta)
             # adjust_neigsector(espace, neig1, n)
             N1, sct = next((k,v) for k,v in espace.items() if abs(v.eigvals[0]-egs)<1e-7)
-            evec = sct.eigvecs[:,0]
-            occp1 = get_occupation(evec,sct.states.up,sct.states.dw,0)
             if np.allclose(N1,N0):
                 gf = build_gf_exact(H, V, espace, beta, egs)
                 sigma += np.reciprocal(gf0(z))-np.reciprocal(gf(z.real,z.imag))
-                found = True
+                evec = sct.eigvecs[:,0]
+                occp1 = get_occupation(evec,sct.states.up,sct.states.dw,0)
                 imp_occp0 += occp0
                 imp_occp1 += occp1
+                found = True
     sigma /= N
     imp_occp0 /= N
     imp_occp1 /= N
