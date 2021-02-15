@@ -129,6 +129,43 @@ def build_espace(H, V, neig_sector=None, cutoff=np.inf):
     return espace, egs
 
 
+def build_non_interacting_espace(ek):
+    """Build spetrum of non-interacting paricles.
+    
+    Args:
+        ek : (np.ndarray, ndim=1) 
+            on-site particle energies.
+    Returns:
+        espace : non-interacting spectrum
+    """
+    from edpyt.build_mb_ham import add_onsites
+    espace = defaultdict(Sector)
+    egs = np.inf
+
+    n = ek.size
+    Uk = np.zeros_like(ek)
+    for nup in range(n+1):
+        states_up = generate_states(n, nup)
+        dup = states_up.size
+        for ndw in range(n+1):
+            states_dw = generate_states(n, ndw)
+            dwn = states_dw.size
+            d = dup * dwn
+            eigvals = np.empty(d)
+            add_onsites(ek, Uk, states_up, states_dw, eigvals, 0.)
+            eigvals.sort()
+            espace[(nup,ndw)] = Sector(
+                States(states_up, states_dw),
+                states_up.size*states_dw.size,
+                states_up.size,
+                states_dw.size,
+                eigvals,
+                None
+            )
+            egs = min(eigvals.min(), egs)
+    return espace, egs
+
+
 def screen_espace(espace, egs, beta=1e6, cutoff=1e-9):#, neig_sector=None, n=0):
     """Keep sectors containing relevant eigen-states:
     any{ exp( -beta * (E(N)-egs) ) } > cutoff. If beta

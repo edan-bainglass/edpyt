@@ -7,8 +7,12 @@ from scipy.optimize import fsolve
 # Smooth
 from scipy.interpolate import interp1d
 from scipy import fftpack
+from scipy.constants import physical_constants
 
-from edpyt.espace import build_espace, screen_espace, adjust_neigsector
+kB = physical_constants['Boltzmann constant in eV/K'][0]
+
+from edpyt.espace import (build_espace, screen_espace, adjust_neigsector, 
+    build_non_interacting_espace)
 from edpyt.gf_exact import build_gf_exact
 from edpyt.operators import check_full
 
@@ -147,6 +151,41 @@ def get_occupation(vector, states_up, states_dw, pos):
     return N
 
 
+def get_entropy(gfimp, espace, egs, beta):
+    """Compute impurity entropy.
+    
+    Ref :: https://d-nb.info/1147380651/34
+    """
+    #     ___
+    #     \                   < H >
+    # S =     kB ln(Z(T)) +  -------   
+    #     /__                   T
+    espace_bath, egs_bath = build_non_interacting_espace(gfimp.ek)
+    E, Z = _get_entropy_params(espace, egs, beta)
+    E_bath, Z_bath = _get_entropy_params(espace_bath, egs_bath, beta)
+
+    T = 1/(kB*beta) # beta = 1/(kB*T)
+    S = _calc_entropy(Z, E, T)
+    S_bath = _calc_entropy(Z_bath, E_bath, T)
+    return S - S_bath
+
+_calc_entropy = lambda Z, E, T: kB*np.log(Z) + E/T
+_calc_entropy.__doc__ = """Helper function to assemble Entropy."""
+
+def _get_entropy_params(espace, egs, beta):
+    """Helper functionto compute < H > and Z.
+    
+    """
+    E = 0.; Z = 0. 
+    for sct in espace.values():
+        eigvals = sct.eigvals - egs
+        exps = np.exp(-beta*eigvals)
+        Z += exps.sum()
+        E += (eigvals*exps).sum()
+    E /= Z
+    return E, Z        
+
+
 def build_siam(H, V, U, gfimp):
     """Build single Anderson Impurity model.
 
@@ -189,6 +228,7 @@ def ded_solve(dos, z, sigma=None, sigma0=None, n=4,
     if sigma0 is None: sigma0 = U/2. # chemical potential
     imp_occp0 = 0.                   # non-interacting impurity occupation
     imp_occp1 = 0.                   # interacting impurity occupation
+    imp_entropy = 0.                 # impurity entropy
     H = np.zeros((n,n))
     V = np.zeros((n,n))
     rs = RandomSampler(dos, [z.real[0],z.real[-1]], n, rng)
@@ -215,19 +255,21 @@ def ded_solve(dos, z, sigma=None, sigma0=None, n=4,
             # adjust_neigsector(espace, neig1, n)
             N1, sct = next((k,v) for k,v in espace.items() if abs(v.eigvals[0]-egs)<1e-7)
             if np.allclose(N1,N0):
-                gf = build_gf_exact(H, V, espace, beta, egs)
+                gf = build_gf_exact(H,V,espace,beta,egs)
                 sigma += np.reciprocal(gf0(z))-np.reciprocal(gf(z.real,z.imag))
                 evec = sct.eigvecs[:,0]
                 occp1 = get_occupation(evec,sct.states.up,sct.states.dw,0)
                 imp_occp0 += occp0
                 imp_occp1 += occp1
+                imp_entropy += get_entropy(gfimp,espace,egs,beta)
                 found = True
     sigma /= N
     imp_occp0 /= N
     imp_occp1 /= N
+    imp_entropy /= (N*kB)
     if return_sigma:
-            return sigma, imp_occp0, imp_occp1
-    return imp_occp0, imp_occp1
+            return sigma, imp_occp0, imp_occp1, imp_entropy
+    return imp_occp0, imp_occp1, imp_entropy
 
 
 def smooth(energies, sigma, cutoff=2):

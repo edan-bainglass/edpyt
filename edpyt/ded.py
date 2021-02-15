@@ -46,6 +46,7 @@ tol = 1e-3
 max_it = 2
 sigma0 = U/2.
 ed = -2
+beta = 0.1
 
 import sys
 from pathlib import Path
@@ -91,20 +92,20 @@ init_rng = timer(init_rng)
 
 it = 0
 eps = tol + 1.
-w[0] -= 1. # nonsym lims random sampler.
 while (it<max_it) and (abs(eps)>tol):
 
     dos = lorentzian_function(2*0.3, ed+sigma0)
-    sigma = np.zeros(w.size+2, dtype=w.dtype)
+    sigma = np.zeros(w.size+3, dtype=w.dtype)
     
     init_rng(random, seed, my_start)
     
-    imp_occp0, imp_occp1 = ded_solve(
-        dos, w, sigma=sigma[:-2], sigma0=sigma0, U=U, n=n,
-        N=my_N, beta=1e6, rng=random)
+    imp_occp0, imp_occp1, imp_entropy = ded_solve(
+        dos, w, sigma=sigma[:-3], sigma0=sigma0, U=U, n=n,
+        N=my_N, beta=beta, rng=random)
     
-    sigma[-2] = imp_occp0
-    sigma[-1] = imp_occp1
+    sigma[-3] = imp_occp0
+    sigma[-2] = imp_occp1
+    sigma[-1] = imp_entropy
     sendbuf = sigma
     recvbuf = None
     if rank == 0:
@@ -114,11 +115,12 @@ while (it<max_it) and (abs(eps)>tol):
                 op=MPI.SUM, root=0)
     
     if rank==0:
-        sigma = recvbuf[:-2]/size
-        imp_occp0 = recvbuf[-2].real/size
-        imp_occp1 = recvbuf[-1].real/size
+        sigma = recvbuf[:-3]/size
+        imp_occp0 = recvbuf[-3].real/size
+        imp_occp1 = recvbuf[-2].real/size
+        imp_entropy = recvbuf[-1].real/size
         eps = smooth(wr, sigma)(0.).real
-        f.write(f'{sigma0:.5f} {eps:.5f} {imp_occp0:.5f} {imp_occp1:.5f}\n'); f.flush()
+        f.write(f'{sigma0:.5f} {eps:.5f} {imp_occp0:.5f} {imp_occp1:.5f} {imp_entropy:.5f}\n'); f.flush()
         np.save(rootdir/f'lorentz_sigma_{it}', sigma)
         gf = 1 / (w -ed -sigma -sigma0 + 0.3j)
         plt.plot(wr, -1/np.pi * gf.imag)
