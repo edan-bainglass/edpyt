@@ -236,16 +236,17 @@ def ded_solve(dos, z, sigma=None, sigma0=None, n=4,
     gfimp = Gfimp(n)
     neig1 = None #np.ones((n+1)*(n+1),int) * 3
     neig0 = None #np.ones((n+1)*(n+1),int) * 3
+    Q = 0.
     for _ in range(N):
         found = False
         while not found:
             gf0.sample()
             gfimp.fit(gf0)
             build_siam(H, V, 0., gfimp)
-            espace, egs = build_espace(H, V, neig0)
-            # screen_espace(espace, egs, beta)
+            espace, egs0 = build_espace(H, V, neig0)
+            # screen_espace(espace, egs0, beta)
             # adjust_neigsector(espace, neig0, n)
-            N0, sct = next((k,v) for k,v in espace.items() if abs(v.eigvals[0]-egs)<1e-7)
+            N0, sct = next((k,v) for k,v in espace.items() if abs(v.eigvals[0]-egs0)<1e-7)
             evec = sct.eigvecs[:,0]
             occp0 = get_occupation(evec,sct.states.up,sct.states.dw,0)
             V[0,0] = U
@@ -254,19 +255,21 @@ def ded_solve(dos, z, sigma=None, sigma0=None, n=4,
             # screen_espace(espace, egs, beta)
             # adjust_neigsector(espace, neig1, n)
             N1, sct = next((k,v) for k,v in espace.items() if abs(v.eigvals[0]-egs)<1e-7)
+            evec = sct.eigvecs[:,0]
             if np.allclose(N1,N0):
-                gf = build_gf_exact(H,V,espace,beta,egs)
-                sigma += np.reciprocal(gf0(z))-np.reciprocal(gf(z.real,z.imag))
-                evec = sct.eigvecs[:,0]
-                occp1 = get_occupation(evec,sct.states.up,sct.states.dw,0)
-                imp_occp0 += occp0
-                imp_occp1 += occp1
-                imp_entropy += get_entropy(gfimp,espace,egs,beta)
                 found = True
-    sigma /= N
-    imp_occp0 /= N
-    imp_occp1 /= N
-    imp_entropy /= (N*kB)
+            occp1 = get_occupation(evec,sct.states.up,sct.states.dw,0)
+            qv = np.exp(-beta*abs(espace[N1].eigvals.min()-espace[N0].eigvals.min()))
+            gf = build_gf_exact(H,V,espace,beta,egs)
+            sigma += (np.reciprocal(gf0(z))-np.reciprocal(gf(z.real,z.imag)))*qv
+            imp_occp0 += occp0*qv
+            imp_occp1 += occp1*qv
+            imp_entropy += get_entropy(gfimp,espace,egs,beta)*qv
+            Q += qv
+    sigma /= Q#N
+    imp_occp0 /= Q#N
+    imp_occp1 /= Q#N
+    imp_entropy /= (Q*kB)#(N*kB)
     if return_sigma:
             return sigma, imp_occp0, imp_occp1, imp_entropy
     return imp_occp0, imp_occp1, imp_entropy
