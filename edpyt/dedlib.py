@@ -11,7 +11,7 @@ from scipy.constants import physical_constants
 
 kB = physical_constants['Boltzmann constant in eV/K'][0]
 
-from edpyt.espace import (build_espace, screen_espace, adjust_neigsector, 
+from edpyt.espace import (build_espace, get_espace_dim, screen_espace, adjust_neigsector, 
     build_non_interacting_espace)
 from edpyt.gf_exact import build_gf_exact
 from edpyt.operators import check_full
@@ -261,8 +261,8 @@ def ded_solve(dos, z, sigma=None, sigma0=None, n=4,
     rs = RandomSampler(dos, [z.real[0],z.real[-1]], n, rng)
     gf0 = Gf0(rs)
     gfimp = Gfimp(n)
-    neig1 = None #np.ones((n+1)*(n+1),int) * 3
-    neig0 = None #np.ones((n+1)*(n+1),int) * 3
+    neig1 = get_espace_dim(n)
+    neig0 = neig1.copy()
     Q = 0.
     for _ in range(N):
         found = False
