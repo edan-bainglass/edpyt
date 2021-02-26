@@ -136,8 +136,15 @@ def get_occupation(vector, states_up, states_dw, pos):
     N = 0.
     dup = states_up.size
     dwn = states_dw.size
-    occps = (vector**2).reshape(dwn, dup)
-
+    occps = (vector**2).reshape(dwn, dup)   
+    #
+    #  | v >  =  | e  e  .... > 
+    #               1  2
+    #
+    #       ___     ___L (#sites)   
+    #       \      \  
+    #  N =                  < v  | n  | v >  
+    #       /__ j  /__ i=0     j    i    j
     for iup in range(dup):
         sup = states_up[iup]
         if check_full(sup, pos):
@@ -176,6 +183,14 @@ def _get_entropy_params(espace, egs, beta):
     """Helper functionto compute < H > and Z.
     
     """
+    #       ___
+    #       \         - beta (E - egs) 
+    #  Z =          e          i
+    #       /__ i
+    #           ___
+    #           \                         - beta (E - egs) 
+    #  < H > =         ( E  - egs )  *  e          i
+    #           /__ i     i
     E = 0.; Z = 0. 
     for sct in espace.values():
         eigvals = sct.eigvals - egs
