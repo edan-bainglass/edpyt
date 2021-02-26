@@ -4,7 +4,7 @@ from edpyt.dedlib import (
     RandomSampler,
     Gf0,
     Gfimp,
-    build_siam,
+    build_siam, get_evecs_occupation,
     get_occupation,
 )
 
@@ -43,13 +43,17 @@ def test_dedlib():
     neig = np.ones((n+1)*(n+1),int)
     espace, egs = build_espace(H, V, neig)
     for (nup, ndw), sct in espace.items():
-        try:
-            evec = sct.eigvecs[:,0]
-        except IndexError:
-            evec = sct.eigvecs
+        # try:
+        #     evec = sct.eigvecs[:,0]
+        # except IndexError:
+        #     evec = sct.eigvecs
         N0 = 0.
         for pos in range(n):
-            N0 += get_occupation(evec,sct.states.up,sct.states.dw,pos)
+            N0 += get_evecs_occupation(sct.eigvecs,
+                                       np.ones((1,)),
+                                       sct.states.up,
+                                       sct.states.dw,
+                                       pos)
         np.testing.assert_allclose(N0, nup+ndw)
 
     # Test non-interacting Green's function.

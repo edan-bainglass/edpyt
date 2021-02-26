@@ -127,34 +127,46 @@ class Gfimp:
     def __call__(self, z):
         return np.reciprocal(z-self.e0-self.delta(z).sum(1))
 
-
-@njit()
-def get_occupation(vector, states_up, states_dw, pos):
-    """Count particles in eigen-state vector (size=dup x dwn).
+# @njit(cache=True,fastmath=True)
+def get_evecs_occupation(evecs, exps, states_up, states_dw, pos):
+    """Count particles in sector eigen-state vectors (size=dup x dwn).
 
     """
+    #       ___       ___L (#sites)   
+    #       \        \                          - beta (E - egs)
+    #  N =                    < v  | n  | v >  e         i
+    #       /__ i    /__ l=0     il    l    il
     N = 0.
     dup = states_up.size
     dwn = states_dw.size
-    occps = (vector**2).reshape(dwn, dup)   
-    #
-    #  | v >  =  | e  e  .... > 
-    #               1  2
-    #
-    #       ___     ___L (#sites)   
-    #       \      \  
-    #  N =                  < v  | n  | v >  
-    #       /__ j  /__ i=0     j    i    j
+    if evecs.flags.f_contiguous:
+        evecs = evecs.T
+    occps = (evecs**2).reshape(-1, dwn, dup)
+
     for iup in range(dup):
         sup = states_up[iup]
         if check_full(sup, pos):
-            N += occps[:,iup].sum()
+            N += (exps * occps[:,:,iup].sum(1)).sum()
 
     for idw in range(dwn):
         sdw = states_dw[idw]
         if check_full(sdw, pos):
-            N += occps[idw,:].sum()
+            N += (exps * occps[:,idw,:].sum(1)).sum()
 
+    return N
+
+
+def get_occupation(espace, egs, beta, pos):
+    """Count particles in espace eigen-state vectors (size=dup x dwn).
+
+    """
+    N = 0.; Z = 0.
+    for sct in espace.values():
+        exps = np.exp(-beta*(sct.eigvals-egs))
+        evecs = sct.eigvecs
+        N += get_evecs_occupation(evecs,exps,sct.states.up,sct.states.dw,pos)
+        Z += exps.sum()
+    N /= Z
     return N
 
 
@@ -262,18 +274,20 @@ def ded_solve(dos, z, sigma=None, sigma0=None, n=4,
             # screen_espace(espace, egs0, beta)
             # adjust_neigsector(espace, neig0, n)
             N0, sct = next((k,v) for k,v in espace.items() if abs(v.eigvals[0]-egs0)<1e-7)
-            evec = sct.eigvecs[:,0]
-            occp0 = get_occupation(evec,sct.states.up,sct.states.dw,0)
+            # evec = sct.eigvecs[:,0]
+            # occp0 = get_occupation(evec,sct.states.up,sct.states.dw,0)
+            occp0 = get_occupation(espace,egs,beta,0)
             V[0,0] = U
             H[0,0] -= sigma0
             espace, egs = build_espace(H, V, neig1)
             # screen_espace(espace, egs, beta)
             # adjust_neigsector(espace, neig1, n)
             N1, sct = next((k,v) for k,v in espace.items() if abs(v.eigvals[0]-egs)<1e-7)
-            evec = sct.eigvecs[:,0]
+            # evec = sct.eigvecs[:,0]
             if np.allclose(N1,N0):
                 found = True
-            occp1 = get_occupation(evec,sct.states.up,sct.states.dw,0)
+            # occp1 = get_occupation(evec,sct.states.up,sct.states.dw,0)
+            occp1 = get_occupation(espace,egs,beta,0)
             qv = np.exp(-beta*abs(espace[N1].eigvals.min()-espace[N0].eigvals.min()))
             gf = build_gf_exact(H,V,espace,beta,egs)
             sigma += (np.reciprocal(gf0(z))-np.reciprocal(gf(z.real,z.imag)))*qv

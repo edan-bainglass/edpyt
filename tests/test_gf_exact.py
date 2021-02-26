@@ -92,4 +92,4 @@ def test_gf_exact_free():
 
 
 if __name__ == '__main__':
-    test_gf_lanczos_free()
+    test_gf_exact_free()

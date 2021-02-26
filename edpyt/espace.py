@@ -81,6 +81,13 @@ def _solve_arpack(H, V, states_up, states_dw, k=6):
     # return sla.eigsh(matvec, k, which='SA')
 
 
+def get_espace_dim(n):
+    neig_sector = np.zeros((n+1)*(n+1),int)
+    for nup, ndw in np.ndindex(n+1,n+1):
+        neig_sector[get_sector_index(n,nup,ndw)] = get_sector_dim(n,nup,ndw)
+    return neig_sector
+
+
 def build_espace(H, V, neig_sector=None, cutoff=np.inf):
     """Generate full spectrum.
 
@@ -98,9 +105,7 @@ def build_espace(H, V, neig_sector=None, cutoff=np.inf):
 
     espace = defaultdict(Sector)
     if neig_sector is None:
-        neig_sector = np.zeros((n+1)*(n+1),int)
-        for nup, ndw in np.ndindex(n+1,n+1):
-            neig_sector[get_sector_index(n,nup,ndw)] = get_sector_dim(n,nup,ndw)
+        neig_sector = get_espace_dim(n)
 
     # Fill in eigen states in eigen space
     egs = np.inf
