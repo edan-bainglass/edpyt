@@ -276,7 +276,7 @@ def ded_solve(dos, z, sigma=None, sigma0=None, n=4,
             N0, sct = next((k,v) for k,v in espace.items() if abs(v.eigvals[0]-egs0)<1e-7)
             # evec = sct.eigvecs[:,0]
             # occp0 = get_occupation(evec,sct.states.up,sct.states.dw,0)
-            occp0 = get_occupation(espace,egs,beta,0)
+            occp0 = get_occupation(espace,egs0,beta,0)
             V[0,0] = U
             H[0,0] -= sigma0
             espace, egs = build_espace(H, V, neig1)
