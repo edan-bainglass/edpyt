@@ -44,5 +44,12 @@ def todense(vec_diag, sp_mat_up, sp_mat_dw):
         H
 
     """
-    mat = diags(vec_diag) + kronsum(sp_mat_up, sp_mat_dw)
-    return mat.todense()
+    # old, much slower
+    # mat = diags(vec_diag) + kronsum(sp_mat_up, sp_mat_dw)
+    dup = sp_mat_up.shape[0]
+    dwn = sp_mat_dw.shape[0]
+    mat = np.kron(np.eye(dwn), sp_mat_up.todense()) \
+        + np.kron(sp_mat_dw.todense(), np.eye(dup))
+    d = mat.shape[0]
+    mat.flat[::d+1] += vec_diag
+    return mat

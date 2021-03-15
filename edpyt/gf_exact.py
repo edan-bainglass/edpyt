@@ -66,7 +66,7 @@ def project_exact(pos, sctI, sctJ):
         iupJ = binsearch(sctJ.states.up, supJ)
         iL = iupI + idwI
         iM = iupJ + idwJ
-        v0 += np.float64(sgnJ)*np.einsum('ij,ik->jk',sctJ.eigvecs[iM,:],sctI.eigvecs[iL,:])
+        v0 += np.float64(sgnJ)*np.einsum('ij,ik->jk',sctJ.eigvecs[iM,:],sctI.eigvecs[iL,:],optimize=True)
     return v0
 
 
