@@ -30,7 +30,8 @@ def continued_fraction(a, b):
 def spectral(l, q):
     def inner(e, eta):
         z = e + 1.j*eta
-        return np.einsum('i,ki',q,np.reciprocal(z[:,None]-l[None,:]))
+        return np.dot(np.reciprocal(z[:,None]-l[None,:]),q)
+        # np.einsum('i,ki',q,np.reciprocal(z[:,None]-l[None,:]))
     return inner
 
 
@@ -99,7 +100,7 @@ def project_exact(pos, op, check_occupation, sctI, sctJ):
         iupJ = binsearch(sctJ.states.up, supJ)
         iL = iupI + idwI
         iM = iupJ + idwJ
-        v0 += np.float64(sgnJ)*np.einsum('ij,ik->jk',sctJ.eigvecs[iM,:],sctI.eigvecs[iL,:])
+        v0 += np.float64(sgnJ)*np.einsum('ij,ik->jk',sctJ.eigvecs[iM,:],sctI.eigvecs[iL,:],optimize=True)
     return v0
 
 
