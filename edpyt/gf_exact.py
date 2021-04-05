@@ -39,7 +39,7 @@ class Gf:
         self.Z = Z
 
     def __call__(self, e, eta):
-        z = e + 1.j*eta
+        z = np.atleast_1d(e + 1.j*eta)
         res = np.dot(np.reciprocal(z[:,None]-self.l[None,:]),self.q)
         # res = np.einsum('i,ki',self.q,np.reciprocal(z[:,None]-self.l[None,:]),optimize=True)
         return res / self.Z

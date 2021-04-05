@@ -72,7 +72,7 @@ def test_gf_lanczos_free():
 
     espace, egs = build_espace(H, V, neig_sector)
     screen_espace(espace, egs, beta=1e3)
-    gf = build_gf_lanczos(H, V, espace, beta=1e3, egs=egs, mu=0.)
+    gf = build_gf_lanczos(H, V, espace, beta=1e3, egs=egs)
 
     eta = 0.25
     energies = np.arange(-10,10,1e-3)

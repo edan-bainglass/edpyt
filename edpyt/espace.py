@@ -88,12 +88,11 @@ def get_espace_dim(n):
     return neig_sector
 
 
-def build_espace(H, V, neig_sector=None, cutoff=np.inf):
+def build_espace(H, V, neig_sector=None):
     """Generate full spectrum.
 
     Args:
         neig_sector : # of eigen states in each sector.
-        cutoff : discard energies for which exp^(-beta(e-egs)) < cutoff.
 
     Return:
         eig_space : list of eigen states ordered by energy.
@@ -187,6 +186,7 @@ def screen_espace(espace, egs, beta=1e6, cutoff=1e-9):#, neig_sector=None, n=0):
             keep_idx = np.where(diff)[0]
             sct.eigvals = sct.eigvals[keep_idx]
             sct.eigvecs = sct.eigvecs[:,keep_idx]
+            assert sct.eigvecs.ndim>1
         else:
             delete.append((nup,ndw))
 

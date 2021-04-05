@@ -29,7 +29,7 @@ def continued_fraction(a, b):
 
 def spectral(l, q):
     def inner(e, eta):
-        z = e + 1.j*eta
+        z = np.atleast_1d(e + 1.j*eta)
         return np.dot(np.reciprocal(z[:,None]-l[None,:]),q)
         # np.einsum('i,ki',q,np.reciprocal(z[:,None]-l[None,:]))
     return inner
@@ -140,7 +140,7 @@ def build_gf_coeff_cf(a, b, Ei=0., exponent=1., sign=1):
     return a, b
 
 
-def build_gf_lanczos(H, V, espace, beta, egs=0., pos=0, mu=0., repr='cf'):
+def build_gf_lanczos(H, V, espace, beta, egs=0., pos=0, repr='cf'):
     """Build Green's function with exact diagonalization.
 
     """
