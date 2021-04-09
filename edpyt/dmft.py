@@ -1,4 +1,3 @@
-from scipy.linalg.special_matrices import toeplitz
 from edpyt.gf_lanczos import build_gf_lanczos
 import numpy as np
 from scipy.optimize import root_scalar, broyden1
@@ -14,17 +13,17 @@ class Gfimp:
     """
     def __init__(self, n, nmats=100, U=3., beta=1e6, neig=None):
         self.n = n
-        self.nmats = nmats # sed in Matsubara fit. 
-        self.beta = beta # sed in Matsubara fit and interacting green's function.
+        self.nmats = nmats # Used in Matsubara fit. 
+        self.beta = beta # Used in Matsubara fit and interacting green's function.
         self.H = np.zeros((n,n))
         self.V = np.zeros((n,n))
         self.V[0,0] = U
         self.Delta = None
         self.neig = neig # used in diagonalization
+        self.uptodate = False
 
     def fit(self, Delta):
-        """Fit hybridization and update bath params.
-        """
+        """Fit hybridization and update bath params."""
         #                __ n-1           2  
         #           !    \               Vk  
         # Delta(z)  =                 -------
@@ -83,8 +82,53 @@ class Gfimp:
         gf = build_gf_lanczos(H, V, espace, self.beta, egs)
         self.Sigma = lambda z: np.reciprocal(self.free(z))-np.reciprocal(gf(z.real,z.imag))
 
+class Gfloc:
+    """Parent local green's function.
+    """
+    def update(self, mu):
+        """Update chemical potential."""
+        self.mu = mu
 
-class Gfhilbert:
+    def set_local(self, Sigma):
+        """Set impurity self-energy to local self-energy!"""
+        self.Sigma = Sigma
+
+    def Delta(self, z):
+        """Hybridization."""
+        #                               -1
+        # Delta(z) = z+mu - Sigma(z) - g (z)
+        #
+        gloc_inv = np.reciprocal(self(z))
+        return z+self.mu-self.Sigma(z)-gloc_inv
+
+    # def free(self, z, inverse=False):
+    #     """Non-interacting green's function."""
+    #     #               1
+    #     #  g (z) = ------------------
+    #     #   0       z + mu - Delta(z)
+    #     g0_inv = z+self.mu-self.Delta(z)
+    #     if inverse:
+    #         return g0_inv
+    #     return np.reciprocal(g0_inv)
+
+
+class Gfhybrid(Gfloc):
+    """Local green's function defined by hybridization.
+    """
+    #          __     
+    #         |                  1
+    # G(z) =  |   de  -----------------------------
+    #       __|       z + mu - Simga(z) - Hybrid(z) 
+    # 
+    def __init__(self, Hybrid):
+        self.Hybrid = Hybrid
+
+    def __call__(self, z):
+        """Interacting green's function."""
+        return np.reciprocal(z+self.mu-self.Sigma(z)-self.Hybrid(z))
+
+
+class Gfhilbert(Gfloc):
     """Local green's function defined by hilbert transform.
     """
     #          __     
@@ -95,35 +139,9 @@ class Gfhilbert:
     def __init__(self, hilbert):
         self.hilbert = hilbert
 
-    def update(self, mu):
-        """Update chemical potential."""
-        self.mu = mu
-
-    def set_local(self, Sigma):
-        """Set impurity self-energy to local self-energy!"""
-        self.Sigma = Sigma
-
     def __call__(self, z):
         """Interacting green's function."""
         return self.hilbert(z+self.mu-self.Sigma(z))
-
-    def Delta(self, z):
-        """Hybridization."""
-        #             -1                 -1
-        # Delta(z) = g (z) - Sigma(z) - g (z)
-        #             0
-        gloc_inv = np.reciprocal(self(z))
-        return z+self.mu-self.Sigma(z)-gloc_inv
-
-    def free(self, z, inverse=False):
-        """Non-interacting green's function."""
-        #               1
-        #  g (z) = ------------------
-        #   0       z + mu - Delta(z)
-        g0_inv = z+self.mu-self.Delta(z)
-        if inverse:
-            return g0_inv
-        return np.reciprocal(g0_inv)
 
 
 def adjust_mu(gf, occupancy_goal, mu=0.):
@@ -150,24 +168,14 @@ class FailedToConverge(Exception):
       self.message = message
 
 
-# def dmft_step(z, sigma, gfimp, gfloc, occupancy_goal):
-#     """Perform a DMFT self-consistency step."""
-#     gfloc.set_local(sigma)
-#     mu = adjust_mu(gfloc, occupancy_goal)
-#     gfloc.update(mu)
-#     Delta = gfloc(z)
-#     gfimp.fit_update(Delta, mu)
-#     gfimp.solve()
-
-
 def dmft_step(delta, gfimp, gfloc, occupancy_goal):
     """Perform a DMFT self-consistency step."""
     gfimp.fit(delta) # at matsubara frequencies
     gfimp.solve()
     mu = adjust_mu(gfimp, occupancy_goal)
     gfimp.update(mu)
-    gfloc.set_local(gfimp.Sigma)
     gfloc.update(mu)
+    gfloc.set_local(gfimp.Sigma)
 
 
 class DMFT:
@@ -181,21 +189,6 @@ class DMFT:
         self.max_iter = max_iter
         wn = (2*np.arange(gfimp.nmats)+1)*np.pi/gfimp.beta
         self.z = 1.j*wn
-
-    # def __call__(self, sigma):
-    #     dmft_step(self.z, sigma, self.gfimp, self.gfloc, self.occupancy_goal)
-    #     sigma_new = self.gfimp.Sigma(self.z)
-    #     eps = np.linalg.norm(sigma_new - sigma)
-    #     if eps < self.tol:
-    #         raise Converged('converged!')
-    #     if self.it > self.max_iter:
-    #         raise FailedToConverge('failed!')
-    #     return sigma_new
-
-    # def solve(self, sigma, alpha=0.5, verbose=True):
-    #     distance = lambda sigma: self(sigma)-sigma
-    #     broyden1(distance, sigma, alpha=alpha, reduction_method="svd", 
-    #             max_rank=10, verbose=verbose, f_tol=1e-99) # Loop forever (small f_tol!)
 
     def initialize(self):
         U = self.gfimp.V[0,0]
@@ -211,13 +204,14 @@ class DMFT:
         delta_new = self.gfloc.Delta(self.z)
         eps = np.linalg.norm(delta_new - delta)
         if eps < self.tol:
-            raise Converged('converged!')
+            raise Converged('Converged!')
+        self.it += 1
         if self.it > self.max_iter:
-            raise FailedToConverge('failed!')
+            raise FailedToConverge('Failed to converge!')
         return delta_new
 
-    def solve(self, sigma, alpha=0.5, verbose=True):
-        distance = lambda sigma: self(sigma)-sigma
-        broyden1(distance, sigma, alpha=alpha, reduction_method="svd", 
+    def solve(self, delta, alpha=0.5, verbose=True):
+        distance = lambda delta: self(delta)-delta
+        broyden1(distance, delta, alpha=alpha, reduction_method="svd", 
                 max_rank=10, verbose=verbose, f_tol=1e-99) # Loop forever (small f_tol!)
 
