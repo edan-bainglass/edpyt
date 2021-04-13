@@ -28,8 +28,8 @@ def zero_fermi(nzp):
         B[i,i] = (2*i-1)
 
     for i in range(1,M):
-        A[i,i+1] = -0.5;
-        A[i+1,i] = -0.5;
+        A[i,i+1] = -0.5
+        A[i+1,i] = -0.5
 
     a = np.zeros(M*M)
     b = np.zeros(M*M)
@@ -50,12 +50,12 @@ def zero_fermi(nzp):
         zp[i] = zp[i-1]
 
     for i in range(1,M+1):
-        zp[i] = 1.0/zp[i];
+        zp[i] = 1.0/zp[i]
 
     a = eigvecs.T.flatten()
 
     for i in range(0,M):
-        Rp[i+1] = -a[i*M]*a[i*M]*zp[i+1]*zp[i+1]*0.250;
+        Rp[i+1] = -a[i*M]*a[i*M]*zp[i+1]*zp[i+1]*0.250
 
     zp = -zp[1:N+1]
     Rp = Rp[1:N+1]
@@ -73,7 +73,7 @@ def integrate_gf(gf, mu=0, T=300, nzp=100, R=1e10):
             n   + n   = 2 * integrate_gf(gf)
             up    dw
     """
-
+    _gf = lambda z: np.diagonal(np.atleast_2d(gf(z)))
     zp, Rp = zero_fermi(nzp)
     N = nzp
 
@@ -82,11 +82,11 @@ def integrate_gf(gf, mu=0, T=300, nzp=100, R=1e10):
     a_p = mu + 1j*zp/beta
 
     R = 1e10
-    mu_0 = 1j*R*gf(1.j*R)
+    mu_0 = 1j*R*_gf(1.j*R)
 
     mu_1 = complex(0)
     for i in range(N):
-        mu_1 += gf(a_p[i]) * Rp[i]
+        mu_1 += _gf(a_p[i]) * Rp[i]
     mu_1 *= -1j*4/beta
 
     rho = np.real(mu_0) + np.imag(mu_1)
