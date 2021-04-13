@@ -3,15 +3,39 @@ import numpy as np
 from scipy.optimize import root_scalar, broyden1
 
 from edpyt.integrate_gf import integrate_gf
-from edpyt.fit import fit_hybrid
+from edpyt.fit import fit_hybrid, fit_weiss_inv, g0inv_discrete
 from edpyt.espace import adjust_neigsector, build_espace, screen_espace
+
+
+def adjust_mu(gf, occupancy_goal, bracket=(-20.,20)):
+    """Get the chemical potential to obtain the occupancy goal.
+    
+    NOTE : The gf is supposed to have the general form
+    (z+mu-Delta(z)-Sigma(z))^-1. Here, `distance` returns
+    the change in mu required to satisfy the occupancy goal.
+    """
+    # def distance(mu):
+    #     gf.update(mu)
+    #     return np.sum((2 * integrate_gf(gf))-occupancy_goal)
+    distance = lambda mu: np.sum((2 * integrate_gf(gf, mu))-occupancy_goal)
+    return root_scalar(distance, bracket=bracket, method='brentq').root + gf.mu
+
+
+class Converged(Exception):
+  def __init__(self, message):
+      self.message = message
+
+
+class FailedToConverge(Exception):
+  def __init__(self, message):
+      self.message = message
 
 
 class Gfimp:
     """Green's function of SIAM model.
 
     """
-    def __init__(self, n, nmats=100, U=3., beta=1e6, neig=None):
+    def __init__(self, n, nmats=3000, U=3., beta=1e6, neig=None):
         self.n = n
         self.nmats = nmats # Used in Matsubara fit. 
         self.beta = beta # Used in Matsubara fit and interacting green's function.
@@ -20,7 +44,6 @@ class Gfimp:
         self.V[0,0] = U
         self.Delta = None
         self.neig = neig # used in diagonalization
-        self.uptodate = False
 
     def fit(self, Delta):
         """Fit hybridization and update bath params."""
@@ -34,6 +57,16 @@ class Gfimp:
         self.H[1:,0] = self.H[0,1:] = self.vk
         self.H.flat[(n+1)::(n+1)] = self.ek
 
+    def fit_weiss_inv(self, Weiss):
+        """Fit hybridization and update bath params."""
+        # g0inv = (z-e0-Delta(z))
+        n = self.n
+        g0inv_disc = fit_weiss_inv(Weiss, n-1, self.nmats, self.beta)
+        self.update(-g0inv_disc.a0)
+        self.Delta = g0inv_disc.Delta
+        self.H[1:,0] = self.H[0,1:] = self.vk
+        self.H.flat[(n+1)::(n+1)] = self.ek
+
     @property
     def vk(self):
         return self.Delta.b
@@ -41,6 +74,11 @@ class Gfimp:
     @property
     def ek(self):
         return self.Delta.a
+
+    @property
+    def mu(self):
+        # ed = -mu
+        return -self.H[0,0]
 
     def update(self, mu):
         """Update chemical potential."""
@@ -82,6 +120,7 @@ class Gfimp:
         gf = build_gf_lanczos(H, V, espace, self.beta, egs)
         self.Sigma = lambda z: np.reciprocal(self.free(z))-np.reciprocal(gf(z.real,z.imag))
 
+
 class Gfloc:
     """Parent local green's function.
     """
@@ -101,15 +140,12 @@ class Gfloc:
         gloc_inv = np.reciprocal(self(z))
         return z+self.mu-self.Sigma(z)-gloc_inv
 
-    # def free(self, z, inverse=False):
-    #     """Non-interacting green's function."""
-    #     #               1
-    #     #  g (z) = ------------------
-    #     #   0       z + mu - Delta(z)
-    #     g0_inv = z+self.mu-self.Delta(z)
-    #     if inverse:
-    #         return g0_inv
-    #     return np.reciprocal(g0_inv)
+    
+    
+# Analytical Bethe lattice
+_ht = lambda z: 2*(z-1j*np.sign(z.imag)*np.sqrt(1-z**2))
+eps = 1e-20
+ht = lambda z: _ht(z.real+1.j*(z.imag if z.imag>0. else eps))
 
 
 class Gfhybrid(Gfloc):
@@ -144,38 +180,14 @@ class Gfhilbert(Gfloc):
         return self.hilbert(z+self.mu-self.Sigma(z))
 
 
-def adjust_mu(gf, occupancy_goal, mu=0.):
-    """Get the chemical potential to obtain the occupancy goal.
-    
-    """
-    distance = lambda mu: (2 * integrate_gf(gf, mu))-occupancy_goal
-    return root_scalar(distance, x0=mu, x1=mu-0.1).root
-    
-    
-# Analytical Bethe lattice
-_ht = lambda z: 2*(z-1j*np.sign(z.imag)*np.sqrt(1-z**2))
-eps = 1e-20
-ht = lambda z: _ht(z.real+1.j*(z.imag if z.imag>0. else eps))
-
-
-class Converged(Exception):
-  def __init__(self, message):
-      self.message = message
-
-
-class FailedToConverge(Exception):
-  def __init__(self, message):
-      self.message = message
-
-
 def dmft_step(delta, gfimp, gfloc, occupancy_goal):
     """Perform a DMFT self-consistency step."""
     gfimp.fit(delta) # at matsubara frequencies
     gfimp.solve()
-    mu = adjust_mu(gfimp, occupancy_goal)
-    gfimp.update(mu)
-    gfloc.update(mu)
     gfloc.set_local(gfimp.Sigma)
+    # mu = adjust_mu(gfimp, occupancy_goal)
+    # gfimp.update(mu)
+    # gfloc.update(mu)
 
 
 class DMFT:
@@ -190,8 +202,12 @@ class DMFT:
         wn = (2*np.arange(gfimp.nmats)+1)*np.pi/gfimp.beta
         self.z = 1.j*wn
 
-    def initialize(self):
-        U = self.gfimp.V[0,0]
+    @staticmethod
+    def dmft_step(*args, **kwargs):
+        return dmft_step(*args, **kwargs)
+
+    def initialize(self, U):
+        # U = self.gfimp.V[0,0]
         Sigma = lambda z: U * self.occupancy_goal / 2.
         mu = U/2.
         self.gfloc.set_local(Sigma)
@@ -200,9 +216,10 @@ class DMFT:
         return self.gfloc.Delta(self.z)
 
     def __call__(self, delta):
-        dmft_step(delta, self.gfimp, self.gfloc, self.occupancy_goal)
+        self.dmft_step(delta, self.gfimp, self.gfloc, self.occupancy_goal)
         delta_new = self.gfloc.Delta(self.z)
         eps = np.linalg.norm(delta_new - delta)
+        print(f'Iteration : {self.it:2} Error : {eps:.5f}')
         if eps < self.tol:
             raise Converged('Converged!')
         self.it += 1
@@ -210,8 +227,24 @@ class DMFT:
             raise FailedToConverge('Failed to converge!')
         return delta_new
 
-    def solve(self, delta, alpha=0.5, verbose=True):
+    def solve_with_broyden_mixing(self, delta, alpha=0.5, verbose=True):
         distance = lambda delta: self(delta)-delta
         broyden1(distance, delta, alpha=alpha, reduction_method="svd", 
                 max_rank=10, verbose=verbose, f_tol=1e-99) # Loop forever (small f_tol!)
+
+    def solve_with_linear_mixing(self, delta, alpha=0.5):
+        delta_in = delta
+        while True:
+            delta_out = self(delta)
+            delta_in = alpha * delta_out + (1-alpha) * delta_in
+
+    def solve(self, delta, mixing_method='broyden', **kwargs):
+        """'linear' or 'broyden' mixing 
+        the quantity being mixed is the hybridisation function
+        
+        """
+        if mixing_method == 'linear':
+            self.solve_with_linear_mixing(delta, **kwargs)
+        elif mixing_method == 'broyden':
+            self.solve_with_linear_mixing(delta, **kwargs)
 
