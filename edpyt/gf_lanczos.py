@@ -13,15 +13,17 @@ from edpyt.operators import check_empty as not_empty
 from edpyt.operators import check_full as not_full
 from edpyt.shared import unsiged_dt
 from edpyt.tridiag import eigh_tridiagonal, gs_tridiag
-
+from edpyt._continued_fraction import continued_fraction as _cfpyx
 
 def continued_fraction(a, b):
     sz = a.size
     def inner(e, eta, n=sz):
-        if n==1:
-            return b[sz-n] / (e + 1.j*eta - a[sz-n])
-        else:
-            return b[sz-n] / (e + 1.j*eta - a[sz-n] - inner(e, eta, n-1))
+        z = np.atleast_1d(e + 1.j*eta)
+        return _cfpyx(z, a, b)
+        # if n==1:
+        #     return b[sz-n] / (e + 1.j*eta - a[sz-n])
+        # else:
+        #     return b[sz-n] / (e + 1.j*eta - a[sz-n] - inner(e, eta, n-1))
     inner.a = a
     inner.b = b
     return inner

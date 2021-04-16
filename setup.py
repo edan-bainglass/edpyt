@@ -26,7 +26,13 @@ ext_1 = Extension(SRC_DIR + '._psparse',
     include_dirs = [np.get_include(),'edpyt'],
     extra_link_args=['-fopenmp'])
 
-EXTENSIONS = [ext_1]
+ext_2 = Extension(SRC_DIR + '._continued_fraction',
+    [SRC_DIR + '/continued_fraction.pyx'],
+    extra_compile_args=['-fopenmp', '-O3', '-ffast-math'],
+    include_dirs = [np.get_include(),'edpyt'],
+    extra_link_args=['-fopenmp'])
+
+EXTENSIONS = [ext_1,ext_2]
 
 setup(install_requires=REQUIRES,
       packages=PACKAGES,
