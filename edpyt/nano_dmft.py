@@ -11,18 +11,49 @@ from edpyt.dmft import (
 from functools import wraps
 
 
-def vectorize(otypes=None, signature=None):
+def vectorize(signature=None, kwarg=None):
+    """Vectorize output of a function.
+    
+    If `kwarg` is not None, check if `kwarg` is absent when 
+    target function is called (wrapper) and automatically add 
+    default `kwarg` to match signature's # of input arguments.
+
+    NOTE : `signature` must include the keyword 
+    argument, if this is present.
+
+    Args:
+        signature : (str)
+            Generalized universal function signature.
+        kwargs : (dict, optional)
+            Default keyword argument.
+    
+    """
     def decorator(fn):
-        vectorized = np.vectorize(fn, otypes=otypes, signature=signature, excluded='self')
-        @wraps(fn)
-        def wrapper(*args):
-            return vectorized(*args)
+        vectorized = np.vectorize(fn, signature=signature)
+        if kwarg is not None:
+            @wraps(fn)
+            def wrapper(*args,**kw):
+                # Add default `kwarg` if kw is not specified.
+                _kw = kw or kwarg
+                return vectorized(*args,**_kw)
+        else:
+            @wraps(fn)
+            def wrapper(*args):
+                return vectorized(*args)
         return wrapper
     return decorator
 
 
 class Gfloc:
-    """Local green's function from hybridization matrix.
+    """nano Local lattice green's function.
+
+        H : Hamiltonian matrix
+        S : overlap matrix
+        Hybrid : (callable) hybridization funciton, must
+            return a matrix of the same dimensions of H(S).
+        (below, see also np.unique)
+        idx_neq : the indices of the input array that give the unique values
+        idx_inv : the indices of the unique array that reconstruct the input array
     """
     def __init__(self, H, S, Hybrid, idx_neq, idx_inv) -> None:
         self.n = H.shape[0]
@@ -36,6 +67,7 @@ class Gfloc:
     def ed(self):
         return self.H.diagonal()[self.idx_neq]
 
+    @vectorize(signature='(),(),()->(n,n)',kwarg=dict(inverse=False))
     def __call__(self, z, inverse=False):
         """Interacting Green's function."""
         x = self.free(z, inverse=True)
@@ -52,7 +84,7 @@ class Gfloc:
         """Set impurity self-energy to diagonal elements of local self-energy!"""
         self.Sigma = Sigma
 
-    @vectorize(signature='(),()->(n)') # first argument is self
+    @vectorize(signature='(),()->(n)')
     def Delta(self, z):
         """Hybridization."""
         #                                       -1
@@ -61,7 +93,7 @@ class Gfloc:
         # gloc_inv = np.reciprocal(self(z).diagonal())[self.idx_neq]
         return z+self.mu-self.ed-self.Weiss(z)
 
-    @vectorize(signature='(),()->(n)') # first argument is self
+    @vectorize(signature='(),()->(n)')
     def Weiss(self, z):
         """Weiss field."""
         #  -1                             -1
@@ -70,6 +102,7 @@ class Gfloc:
         gloc_inv = np.reciprocal(self(z).diagonal())[self.idx_neq]
         return gloc_inv+self.Sigma(z)
 
+    @vectorize(signature='(),(),()->(n,n)',kwarg=dict(inverse=False))
     def free(self, z, inverse=False):
         """Non-interacting green's function."""
         #                                       -1
@@ -115,7 +148,7 @@ class Gfimp:
         """Correlated self-energy."""
         return np.fromiter((gf.Sigma(z) for gf in self), complex)
 
-    @vectorize(signature='(),(),()->(n)')
+    @vectorize(signature='(),(),()->(n)',kwarg=dict(inverse=False))
     def free(self, z, inverse=False):
         """Correlated self-energy."""
         return np.fromiter((gf.free(z, inverse=inverse) for gf in self), complex)

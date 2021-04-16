@@ -14,9 +14,6 @@ def adjust_mu(gf, occupancy_goal, bracket=(-20.,20)):
     (z+mu-Delta(z)-Sigma(z))^-1. Here, `distance` returns
     the change in mu required to satisfy the occupancy goal.
     """
-    # def distance(mu):
-    #     gf.update(mu)
-    #     return np.sum((2 * integrate_gf(gf))-occupancy_goal)
     distance = lambda mu: np.sum((2 * integrate_gf(gf, mu))-occupancy_goal)
     return root_scalar(distance, bracket=bracket, method='brentq').root + gf.mu
 
