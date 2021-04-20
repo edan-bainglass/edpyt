@@ -32,7 +32,7 @@ def sl_step(matvec, v, l):
     return a, b, v, w
 
 
-def build_sl_tridiag(matvec, phi0, maxn=300, delta=1e-15, tol=1e-10, ND=10):
+def build_sl_tridiag(matvec, phi0, maxn=500, delta=1e-15, tol=1e-10, ND=10):
     '''Build tridiagonal coeffs. with simple Lanczos method.
 
     Args:

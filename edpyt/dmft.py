@@ -114,7 +114,7 @@ class Gfimp:
         espace, egs = build_espace(H, V, self.neig)
         screen_espace(espace, egs)
         adjust_neigsector(espace, self.neig, self.n)
-        gf = build_gf_lanczos(H, V, espace, self.beta, egs)
+        gf = build_gf_lanczos(H, V, espace, self.beta, egs, repr='sp')
         self.Sigma = lambda z: np.reciprocal(self.free(z))-np.reciprocal(gf(z.real,z.imag))
 
 
@@ -134,9 +134,12 @@ class Gfloc:
         #                               -1
         # Delta(z) = z+mu - Sigma(z) - g (z)
         #
-        gloc_inv = np.reciprocal(self(z))
-        return z+self.mu-self.Sigma(z)-gloc_inv
+        return z+self.mu-self.Weiss(z)
 
+    def Weiss(self, z):
+        """Weiss filed."""
+        gloc_inv = self(z, inverse=True)
+        return self.Sigma(z)+gloc_inv
     
     
 # Analytical Bethe lattice
@@ -156,9 +159,18 @@ class Gfhybrid(Gfloc):
     def __init__(self, Hybrid):
         self.Hybrid = Hybrid
 
-    def __call__(self, z):
+    def __call__(self, z, inverse=False):
         """Interacting green's function."""
-        return np.reciprocal(z+self.mu-self.Sigma(z)-self.Hybrid(z))
+        gloc_inv = self.free(z,inverse=True)-self.Sigma(z)
+        if inverse:
+            return gloc_inv
+        return np.reciprocal(gloc_inv)
+
+    def free(self, z, inverse=False):
+        g0inv = z+self.mu-self.Hybrid(z)
+        if inverse:
+            return g0inv
+        return np.reciprocal(g0inv)
 
 
 class Gfhilbert(Gfloc):
@@ -172,24 +184,39 @@ class Gfhilbert(Gfloc):
     def __init__(self, hilbert):
         self.hilbert = hilbert
 
-    def __call__(self, z):
+    def __call__(self, z, inverse=False):
         """Interacting green's function."""
-        return self.hilbert(z+self.mu-self.Sigma(z))
+        gloc = self.hilbert(z+self.mu-self.Sigma(z))
+        if inverse:
+            return np.reciprocal(gloc)
+        return gloc
+
+    def free(self, z, inverse=False):
+        g0 = self.hilbert(z+self.mu)
+        if inverse:
+            return np.reciprocal(g0)
+        return g0
 
 
-def dmft_step(delta, gfimp, gfloc, occupancy_goal):
-    """Perform a DMFT self-consistency step."""
+def dmft_step(delta, gfimp, gfloc, occupancy_goal=None):
+    """Perform a DMFT self-consistency step.
+    
+    Fit the hybridization function with a discrete bath and
+    solve the impurity associated problem. If a target
+    occupation is given, adjust mu of both local and impurity.
+    """
     gfimp.fit(delta) # at matsubara frequencies
     gfimp.solve()
     gfloc.set_local(gfimp.Sigma)
-    # mu = adjust_mu(gfimp, occupancy_goal)
-    # gfimp.update(mu)
-    # gfloc.update(mu)
+    if occupancy_goal is not None:
+        mu = adjust_mu(gfimp, occupancy_goal)
+        gfimp.update(mu)
+        gfloc.update(mu)
 
 
 class DMFT:
     
-    def __init__(self, gfimp, gfloc, occupancy_goal, max_iter=20, tol=1e-3):
+    def __init__(self, gfimp, gfloc, occupancy_goal=None, max_iter=20, tol=1e-3):
         self.gfimp = gfimp
         self.gfloc = gfloc
         self.occupancy_goal = occupancy_goal
@@ -199,12 +226,16 @@ class DMFT:
         wn = (2*np.arange(gfimp.nmats)+1)*np.pi/gfimp.beta
         self.z = 1.j*wn
 
-    @staticmethod
-    def dmft_step(*args, **kwargs):
-        return dmft_step(*args, **kwargs)
+    def dmft_step(self, delta):
+        print(f'Iteration : {self.it:2}')
+        dmft_step(delta, self.gfimp, self.gfloc, self.occupancy_goal)
+        delta_new = self.gfloc.Delta(self.z)
+        if self.occupancy_goal is not None:
+            occp = 2.*integrate_gf(self.gfimp)[0]
+            print(f'Occupation : {occp:.5f} Chemical potential : {self.gfimp.mu:.5f}', end=' ')
+        return delta_new
 
     def initialize(self, U):
-        # U = self.gfimp.V[0,0]
         Sigma = lambda z: U * self.occupancy_goal / 2.
         mu = U/2.
         self.gfloc.set_local(Sigma)
@@ -213,10 +244,9 @@ class DMFT:
         return self.gfloc.Delta(self.z)
 
     def __call__(self, delta):
-        self.dmft_step(delta, self.gfimp, self.gfloc, self.occupancy_goal)
-        delta_new = self.gfloc.Delta(self.z)
+        delta_new = self.dmft_step(delta)
         eps = np.linalg.norm(delta_new - delta)
-        print(f'Iteration : {self.it:2} Error : {eps:.5f}')
+        print(f'Error : {eps:.5f}')
         if eps < self.tol:
             raise Converged('Converged!')
         self.it += 1
@@ -224,10 +254,10 @@ class DMFT:
             raise FailedToConverge('Failed to converge!')
         return delta_new
 
-    def solve_with_broyden_mixing(self, delta, alpha=0.5, verbose=True):
+    def solve_with_broyden_mixing(self, delta, alpha=0.5, verbose=True, callback=None):
         distance = lambda delta: self(delta)-delta
         broyden1(distance, delta, alpha=alpha, reduction_method="svd", 
-                max_rank=10, verbose=verbose, f_tol=1e-99) # Loop forever (small f_tol!)
+                max_rank=10, verbose=verbose, f_tol=1e-99, callback=callback) # Loop forever (small f_tol!)
 
     def solve_with_linear_mixing(self, delta, alpha=0.5):
         delta_in = delta
@@ -243,5 +273,5 @@ class DMFT:
         if mixing_method == 'linear':
             self.solve_with_linear_mixing(delta, **kwargs)
         elif mixing_method == 'broyden':
-            self.solve_with_linear_mixing(delta, **kwargs)
+            self.solve_with_broyden_mixing(delta, **kwargs)
 

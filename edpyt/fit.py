@@ -3,6 +3,9 @@ from scipy.optimize import fmin_bfgs
 from functools import singledispatch
 import typing
 
+"""Look at DCore github for example codes."""
+
+
 def hybrid_discrete(params):
     """Discrete bath to fit.
 

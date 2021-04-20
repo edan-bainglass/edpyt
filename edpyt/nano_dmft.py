@@ -67,7 +67,7 @@ class Gfloc:
     def ed(self):
         return self.H.diagonal()[self.idx_neq]
 
-    @vectorize(signature='(),(),()->(n,n)',kwarg=dict(inverse=False))
+    # @vectorize(signature='(),(),()->(n,n)',kwarg=dict(inverse=False))
     def __call__(self, z, inverse=False):
         """Interacting Green's function."""
         x = self.free(z, inverse=True)
@@ -102,7 +102,7 @@ class Gfloc:
         gloc_inv = np.reciprocal(self(z).diagonal())[self.idx_neq]
         return gloc_inv+self.Sigma(z)
 
-    @vectorize(signature='(),(),()->(n,n)',kwarg=dict(inverse=False))
+    # @vectorize(signature='(),(),()->(n,n)',kwarg=dict(inverse=False))
     def free(self, z, inverse=False):
         """Non-interacting green's function."""
         #                                       -1
@@ -160,17 +160,25 @@ class Gfimp:
         yield from self.gfimp
 
 
-def dmft_step(delta, gfimp, gfloc, occupancy_goal):
+def dmft_step(delta, gfimp, gfloc, occupancy_goal=None):
     """Perform a DMFT self-consistency step."""
     for i, gf in enumerate(gfimp):
         gf.fit(delta[:,i])
         gf.update(gfloc.mu-gfloc.ed[i])
         gf.solve()
     gfloc.set_local(gfimp.Sigma)
+    if occupancy_goal is not None:
+        mu = adjust_mu(gfloc, occupancy_goal)
+        gfloc.update(mu)
 
 
 class nanoDMFT(DMFT):
 
-    @staticmethod
-    def dmft_step(*args, **kwargs):
-        return dmft_step(*args, **kwargs)
+    def dmft_step(self, delta):
+        print(f'Iteration : {self.it:2}')
+        dmft_step(delta, self.gfimp, self.gfloc, self.occupancy_goal[self.gfloc.idx_inv])
+        delta_new = self.gfloc.Delta(self.z)
+        if self.occupancy_goal is not None:
+            occp = sum(2.*integrate_gf(self.gfloc))
+            print(f'Occupation : {occp:.5f} Chemical potential : {self.gfloc.mu:.5f}', end=' ')
+        return delta_new
