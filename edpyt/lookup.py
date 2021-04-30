@@ -31,11 +31,22 @@ def binrep(i, n, format="array"):
 
     arr_repr = np.fromiter(str_repr,dtype='S1').astype(unsiged_dt)
     if format in ["array","arr"]:
-        return arr_repr[::-1]
+        return arr_repr#[::-1]
 
     else:
         raise ValueError(
             "Invalid format type {}.".format(format))
+
+
+def intrep(arr_repr):
+    """Inverse of binrep."""
+    if isinstance(arr_repr, str):
+        return np.uint32(int(arr_repr, base=2))
+    i = unsiged_dt(0)
+    for shift, j in enumerate(arr_repr[::-1]):
+        if j:
+            i += unsiged_dt(1) << shift
+    return i
 
 
 @njit(['UniTuple(int64,2)(int64,int64,int64)',
