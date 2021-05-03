@@ -187,7 +187,7 @@ def add_onsites(ener_diags, int_diags, states_up, states_dw, vec_diag, hfshift):
             vec_diag[i] = onsite_energy + onsite_int + hfshift
 
 
-def build_mb_ham(H, V, states_up, states_dw):
+def build_mb_ham(H, V, states_up, states_dw, comm=None):
     """Build sparse Hamiltonian of the sector.
 
     Args:
@@ -195,6 +195,8 @@ def build_mb_ham(H, V, states_up, states_dw):
         V : Interaction matrix (n x n).
         nup : number of up spins
         ndw : number of down spins
+        comm : if MPI communicator is given the hilbert space
+            is assumed to be diveded along spin-down dimension.
     """
     n = H.shape[0]
     ener_diags = H.diagonal().copy()
@@ -220,11 +222,22 @@ def build_mb_ham(H, V, states_up, states_dw):
 
     dup = states_up.size
     dwn = states_dw.size
-    d = dup * dwn
-
+    if comm is not None:
+        size = comm.Get_size()
+        rank = comm.Get_rank()
+        dwn_local = dwn//size
+        d = dwn_local * dup
+    else:    
+        dwn_local = dwn
+        d = dup * dwn
+        rank = 0
     # On-site terms :
     vec_diag = np.empty(d)
-    add_onsites(ener_diags, int_diags, states_up, states_dw, vec_diag, hfshift)
+    add_onsites(ener_diags, int_diags, 
+        states_up, 
+        # split hilbert space along down-dim, if necessary (`comm` is not None)
+        states_dw[rank*dwn_local:(rank+1)*dwn_local],
+        vec_diag, hfshift)
 
     # Hoppings
     nnz_offdiag = count_nnz_offdiag(H)

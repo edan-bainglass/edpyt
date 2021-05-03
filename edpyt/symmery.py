@@ -92,4 +92,5 @@ def find_state(s, a):
 
 
 def apply_symm(diag_ops, offdiag_ops, reprs, degens):
-    for r, degeneracy in zip(reprs, degens):
+    pass
+    # for r, degeneracy in zip(reprs, degens):
