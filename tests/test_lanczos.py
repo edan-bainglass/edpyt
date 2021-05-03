@@ -41,8 +41,9 @@ def test_build_sl_tridiag_egs():
 
     v = v0
     l = np.zeros_like(v)
+    lanc_step = sl_step(H.dot)
     for n in range(a.size):
-        _, _, l, v = sl_step(H.dot, v, l)
+        _, _, l, v = lanc_step(v, l)
         computed += l[:,None] * U[n][None,:]
 
     np.testing.assert_allclose(

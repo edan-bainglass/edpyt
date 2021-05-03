@@ -1,19 +1,33 @@
 import numpy as np
-from scipy.linalg import norm
+from functools import partial
+from numba import njit, prange
 from scipy.linalg.blas import get_blas_funcs
 
-from edpyt.tridiag import (
-    egs_tridiag
-)
+from edpyt.tridiag import egs_tridiag, eigh_tridiagonal
 
 axpy = get_blas_funcs('axpy', dtype=np.float64)
 scal = get_blas_funcs('scal', dtype=np.float64)
 swap = get_blas_funcs('swap', dtype=np.float64)
 
 
-def sl_step(matvec, v, l):
-    """Given the current (\tilde(v)) and previous (l) Lanc. vectors,
-    compute a single (simple) Lanc. step
+def sl_step(matvec, comm=None):
+    """Simple Lanczos step.    
+    
+    Args:
+        comm : if MPI communicator is given the hilbert space
+            is assumed to be diveded along spin-down dimension.
+    """
+    if comm is None:
+        return partial(_sl_step, matvec)
+    else:
+        return partial(_sl_step_mpi, matvec, comm=comm)
+
+
+def _sl_step(matvec, v, l):
+    """Simple Lanczos step.
+    
+    Given the current (\tilde(v)) and previous (l) Lanc. vectors,
+    compute a single Lanczos step.
 
     Return:
         a : <v+1|v>
@@ -22,7 +36,7 @@ def sl_step(matvec, v, l):
         v+1 : Av - av - bl
 
     """
-    b = norm(v)
+    b = np.linalg.norm(v)
     scal(1/b,v)
     w = matvec(v)
     a = v.dot(w)
@@ -32,7 +46,27 @@ def sl_step(matvec, v, l):
     return a, b, v, w
 
 
-def build_sl_tridiag(matvec, phi0, maxn=500, delta=1e-15, tol=1e-10, ND=10):
+def _sl_step_mpi(matvec, v, l, comm):
+    """Same as sl_step, but with MPI support.
+
+    Args:
+        sl_lanc(*args[:-1])
+        comm : MPI communicator
+    """
+    from mpi4py.MPI import SUM
+    b2_local = v.dot(v)
+    b = np.sqrt(comm.allreduce(b2_local, op=SUM))
+    scal(1/b,v)
+    w = matvec(v)
+    a_local = v.dot(w)
+    a = comm.allreduce(a_local, op=SUM)
+    # w -= (a[n] * v + b[n] * l)
+    axpy(v,w,v.size,-a)
+    axpy(l,w,l.size,-b)    
+    return a, b, v, w
+
+
+def build_sl_tridiag(matvec, phi0, maxn=500, delta=1e-15, tol=1e-10, ND=10, comm=None):
     '''Build tridiagonal coeffs. with simple Lanczos method.
 
     Args:
@@ -40,15 +74,21 @@ def build_sl_tridiag(matvec, phi0, maxn=500, delta=1e-15, tol=1e-10, ND=10):
         delta : set threshold for min || b[n] ||.
         tol : set threshold for min change in groud state energy.
         ND : # of iterations to check change in groud state energy.
+        comm : MPI communicator
 
     Returns:
         a : diagonal elements
         b : off-diagonal elements
 
-    Note:
-        T := diag(a,k=0) + diag(b[1:],k=1) + diag(b[1:],k=-1)
-
+    NOTE:
+        1) T := diag(a,k=0) + diag(b[1:],k=1) + diag(b[1:],k=-1)
+        2) with MPI support, the stopping condition is the same
+        since both
+            i) b[n]
+            ii) groud state energy (coming from a[:n],b[:n]) 
+        are known by all processes at each iteration.
     '''
+    lanc_step = sl_step(matvec, comm)
     a = np.empty(maxn, dtype=np.float64)
     b = np.empty(maxn, dtype=np.float64)
     # Loops vars.
@@ -60,7 +100,7 @@ def build_sl_tridiag(matvec, phi0, maxn=500, delta=1e-15, tol=1e-10, ND=10):
     n = 0
     while not converged:
         for _ in range(ND):
-            a[n], b[n], l, v = sl_step(matvec, v, l)
+            a[n], b[n], l, v = lanc_step(v, l)
             if (abs(b[n])<delta) or (n>=maxn):
                 converged = True
                 break
@@ -75,6 +115,65 @@ def build_sl_tridiag(matvec, phi0, maxn=500, delta=1e-15, tol=1e-10, ND=10):
             egs_prev = egs
 
     return a[:n], b[:n]
+
+
+@njit('(float64[:],float64[:],float64[:,:])',parallel=True,fastmath=True)
+def _kron(u_row, l, r):
+    """Helper function used in sl_solve."""
+    for i in range(u_row.size):
+        coeff = u_row[i]
+        for k in prange(l.size):
+            r[i,k] += coeff * l[k]
+
+
+def sl_solve(matvec, a, b, v0=None, select=0, select_range=(0,0), eigvals_only=False, comm=None):
+    """Lanczos second pass.
+
+    The Lanczos projection is defined
+        
+        T = V^+ H V # tridiagonal matrix
+    
+    and T can be diagonalized
+    
+        U^+ T U = D
+    
+    Hence, the vectors in the original hilbert space are:
+    
+        U^+ V^+ H V U = D
+        X = V U
+    
+    Example:
+    
+    import sympy
+    V = sympy.MatrixSymbol('V',3,2)
+    U = sympy.MatrixSymbol('U',2,2)
+    X = V*U
+    X.as_explicit()
+    Matrix([
+            [U[0, 0]*V[0, 0] + U[1, 0]*V[0, 1], U[0, 1]*V[0, 0] + U[1, 1]*V[0, 1]],
+            [U[0, 0]*V[1, 0] + U[1, 0]*V[1, 1], U[0, 1]*V[1, 0] + U[1, 1]*V[1, 1]],
+            [U[0, 0]*V[2, 0] + U[1, 0]*V[2, 1], U[0, 1]*V[2, 0] + U[1, 1]*V[2, 1]]])
+    
+    -->
+    for i in range(U.shape[0]):
+        X += V[:,i][:,None] U[i,:][None,:]
+    <--
+
+    """
+    assert select in [0,2], f"Invalid select type {select}."
+    w, U = eigh_tridiagonal(a, b[1:], select, select_range, eigvals_only)
+    if eigvals_only:
+        return w
+    else:
+        assert v0 is not None, f"Starting lanczos vector must be provided for eigenvectors."
+    lanc_step = sl_step(matvec, comm)
+    v = v0
+    l = np.zeros_like(v)
+    r = np.zeros((U.shape[1],v0.size),v0.dtype)
+    for n in range(a.size):
+        _, _, l, v = lanc_step(v, l)
+        _kron(U[n],l,r)
+    return w, r.T # use convention v[:,0] is a vector (here, in 'F' order)
 
 
 def gram_schmidt_rows(X, row_vecs=True, norm = True):
