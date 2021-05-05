@@ -232,7 +232,7 @@ def build_bd_tridiag(matvec, phi0, maxn=300, delta=1e-15, tol=1e-10, ND=10):
     Lc = L
     while (not converged) and (n<(maxn-Lc)):
         v = vk[0]
-        b = norm(v) # || v || _2
+        b = np.linalg.norm(v) # || v || _2
         if (abs(b)<delta): # Check deflation.
             if ((n-Lc)>=0):
                 I.append(n-Lc)

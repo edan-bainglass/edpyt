@@ -2,9 +2,8 @@ import numpy as np
 from numba import njit, types
 
 # Unsigned dtype
-from edpyt.shared import (
-    unsiged_dt
-)
+from edpyt.shared import unsigned_one
+
 
 @njit(['uint32(uint32,int64)',
        'uint32(uint32,int32)'])
@@ -12,7 +11,7 @@ def flip(s, pos):
     """Flip spin at position pos.
 
     """
-    s_out = (unsiged_dt(1)<<pos)^s
+    s_out = (unsigned_one<<pos)^s
     return s_out
 
 
@@ -24,7 +23,7 @@ def fsgn(s, pos):
     """
     bits = 0
     for k in range(pos):
-        bits += (s>>k)&unsiged_dt(1)
+        bits += (s>>k)&unsigned_one
     return 1-2*(bits%2)
 
 
@@ -70,19 +69,23 @@ def c(s, pos):
     return fermionic_sgn, s_out
 
 
-@njit(['int32(uint32,int64)',
-       'int32(uint32,int32)'])
+@njit(['uint32(uint32,int64)',
+       'uint32(uint32,int32)'])
 def check_full(s, pos):
     """Particle count operator.
 
     """
-    return (s>>pos)&unsiged_dt(1)
+    return (s>>pos)&unsigned_one
 
 
-@njit(['int32(uint32,int64)',
-       'int32(uint32,int32)'])
+@njit(['uint32(uint32,int64)',
+       'uint32(uint32,int32)'])
 def check_empty(s, pos):
     """Hole count operator.
 
     """
-    return not check_full(s, pos) #e(s>>pos)^unsiged_dt(1)
+    return not check_full(s, pos) #e(s>>pos)^unsigned_one
+
+
+n_op = check_full
+ndg_op = check_empty
