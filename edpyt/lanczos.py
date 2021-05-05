@@ -101,7 +101,7 @@ def build_sl_tridiag(matvec, phi0, maxn=500, delta=1e-15, tol=1e-10, ND=10, comm
     while not converged:
         for _ in range(ND):
             a[n], b[n], l, v = lanc_step(v, l)
-            if (abs(b[n])<delta) or (n>=maxn):
+            if (abs(b[n])<delta) or (n>=(maxn-1)):
                 converged = True
                 break
             n += 1
