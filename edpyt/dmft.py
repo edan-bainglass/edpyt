@@ -18,6 +18,17 @@ def adjust_mu(gf, occupancy_goal, bracket=(-20.,20)):
     return root_scalar(distance, bracket=bracket, method='brentq').root + gf.mu
 
 
+def break_spin_symmetry(H, sign, field):
+    """Break spin symmetry by applying a symmetry breaking field.
+    
+    ack.: https://github.com/QcmPlab/LIB_DMFT_ED/blob/master/src/ED_BATH/user_aux.f90
+    """
+    assert H.ndim==3, "Hamiltonina must have spin index along 1st dimension."
+    n = H.shape[-1]
+    H[0,(n+1)::(n+1)] += sign * field
+    H[1,(n+1)::(n+1)] -= sign * field
+
+
 class Converged(Exception):
   def __init__(self, message):
       self.message = message
@@ -32,7 +43,7 @@ class Gfimp:
     """Green's function of SIAM model.
 
     """
-    def __init__(self, n, nmats=3000, U=3., beta=1e6, neig=None):
+    def __init__(self, n, nmats=3000, U=3., beta=1e6, neig=None, nspin=1):
         self.n = n
         self.nmats = nmats # Used in Matsubara fit. 
         self.beta = beta # Used in Matsubara fit and interacting green's function.

@@ -45,7 +45,7 @@ class Gf:
         return res / self.Z
 
 
-def project_exact(pos, sctI, sctJ):
+def project_exact_up(pos, op, check_occupation, sctI, sctJ):
     """Project states of sector sctI onto eigenbasis of sector sctJ.
 
     """
@@ -61,8 +61,8 @@ def project_exact(pos, sctI, sctJ):
     for iupI in range(sctI.dup):
         supI = sctI.states.up[iupI]
         # Check for empty impurity
-        if check_full(supI, pos): continue
-        sgnJ, supJ = cdg(supI, pos)
+        if check_occupation(supI, pos): continue
+        sgnJ, supJ = op(supI, pos)
         iupJ = binsearch(sctJ.states.up, supJ)
         iL = iupI + idwI
         iM = iupJ + idwJ
@@ -70,7 +70,32 @@ def project_exact(pos, sctI, sctJ):
     return v0
 
 
-def build_gf_exact(H, V, espace, beta, egs=0., pos=0):
+def project_exact_dw(pos, op, check_occupation, sctI, sctJ):
+    """Project states of sector sctI onto eigenbasis of sector sctJ.
+
+    """
+    #                      ____
+    #          +          \
+    # < N'j| c  | Nk > =   \        a     a     , \__/ i',i  | N'i' >  =  op  | Ni >
+    #          0           /         i',j  i,k     \/                       0
+    #                     /____ i'i
+    #                           (lattice sites)
+    v0 = np.zeros((sctJ.eigvals.size,sctI.eigvals.size))
+    iupI = np.arange(sctI.dup)
+    iupJ = np.arange(sctJ.dup)
+    for idwI in range(sctI.dwn):
+        sdwI = sctI.states.dw[idwI]
+        # Check for empty impurity
+        if check_occupation(sdwI, pos): continue
+        sgnJ, sdwJ = op(sdwI, pos)
+        idwJ = binsearch(sctJ.states.dw, sdwJ)
+        iL = idwI + iupI
+        iM = idwJ + iupJ
+        v0 += np.float64(sgnJ)*np.einsum('ij,ik->jk',sctJ.eigvecs[iM,:],sctI.eigvecs[iL,:],optimize=True)
+    return v0
+
+
+def build_gf_exact(H, V, espace, beta, egs=0., pos=0, ispin=0):
     """Build Green's function with exact diagonalization.
 
     """
@@ -83,7 +108,8 @@ def build_gf_exact(H, V, espace, beta, egs=0., pos=0):
     #             /_____
     #            N,N',l,l'.
     #
-    n = H.shape[0]
+    n = H.shape[-1]
+    project_exact = [project_exact_up, project_exact_dw][ispin]
     # espace, egs = build_espace(H, V)
     lambdas = []
     qs = []
@@ -109,7 +135,7 @@ def build_gf_exact(H, V, espace, beta, egs=0., pos=0):
         EI = (sctI.eigvals-egs)[None,:]
         EJ = (sctJ.eigvals-egs)[:,None]
         exponents = np.exp(-beta*EJ) + np.exp(-beta*EI)
-        bJ = project_exact(pos, sctI, sctJ)
+        bJ = project_exact(pos, cdg, check_full, sctI, sctJ)
         lambdas.extend((EJ - EI).flatten())
         qs.extend((bJ**2 * exponents).flatten())
 

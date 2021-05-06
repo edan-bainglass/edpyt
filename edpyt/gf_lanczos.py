@@ -1,19 +1,18 @@
-from multiprocessing import Pool
-
 import numpy as np
-from numba import njit, prange, vectorize
 
 from edpyt.build_mb_ham import build_mb_ham
 from edpyt.espace import build_empty_sector, build_from_sector, solve_sector
 from edpyt.lanczos import build_sl_tridiag
-from edpyt.lookup import binsearch, get_spin_indices, get_state_index
+from edpyt.lookup import binsearch
 from edpyt.matvec_product import matvec_operator
 from edpyt.operators import c, cdg
 from edpyt.operators import check_empty as not_empty
 from edpyt.operators import check_full as not_full
-from edpyt.shared import unsiged_dt
-from edpyt.tridiag import eigh_tridiagonal, gs_tridiag
+from edpyt.tridiag import eigh_tridiagonal
 from edpyt._continued_fraction import continued_fraction as _cfpyx
+from edpyt.sector import get_cdg_sector, get_c_sector
+from edpyt.gf_exact import project_exact_up, project_exact_dw
+
 
 def continued_fraction(a, b):
     sz = a.size
@@ -53,8 +52,8 @@ class Gf:
         return out / self.Z
 
 
-def project(pos, op, check_occupation, sctI, sctJ):
-    """Project states of sector sctI onto eigenbasis of sector sctJ.
+def project_up(pos, op, check_occupation, sctI, sctJ):
+    """Project states of sector sctI onto eigenbasis of sector sctJ (nupJ=nupI+1).
 
     """
     #
@@ -81,28 +80,22 @@ def project(pos, op, check_occupation, sctI, sctJ):
     return v0
 
 
-def project_exact(pos, op, check_occupation, sctI, sctJ):
-    """Project states of sector sctI onto eigenbasis of sector sctJ.
+def project_dw(pos, op, check_occupation, sctI, sctJ):
+    """Project states of sector sctI onto eigenbasis of sector sctJ (ndwJ=ndwI+1).
 
     """
-    #                      ____
-    #          +          \
-    # < N'j| c  | Nk > =   \        a     a     , \__/ i',i  | N'i' >  =  op  | Ni >
-    #          0           /         i',j  i,k     \/                       0
-    #                     /____ i'i
-    #                           (lattice sites)
-    v0 = np.zeros((sctJ.d,sctI.eigvals.size))
-    idwI = np.arange(sctI.dwn) * sctI.dup
-    idwJ = np.arange(sctJ.dwn) * sctJ.dup #idwJ.size=idwI.size
-    for iupI in range(sctI.dup):
-        supI = sctI.states.up[iupI]
+    v0 = np.zeros((sctI.eigvals.size,sctJ.d))
+    iupI = np.arange(sctI.dup)
+    iupJ = np.arange(sctJ.dup) # dupI=dupJ
+    for idwI in range(sctI.dwn):
+        sdwI = sctI.states.dw[idwI]
         # Check for empty impurity
-        if check_occupation(supI, pos): continue
-        sgnJ, supJ = op(supI, pos)
-        iupJ = binsearch(sctJ.states.up, supJ)
-        iL = iupI + idwI
-        iM = iupJ + idwJ
-        v0 += np.float64(sgnJ)*np.einsum('ij,ik->jk',sctJ.eigvecs[iM,:],sctI.eigvecs[iL,:],optimize=True)
+        if check_occupation(sdwI, pos): continue
+        sgnJ, sdwJ = op(sdwI, pos)
+        idwJ = binsearch(sctJ.states.dw, sdwJ)
+        iL = idwI + iupI
+        iM = idwJ + iupJ
+        v0[:,iM] = np.float64(sgnJ)*sctI.eigvecs[iL,:].T
     return v0
 
 
@@ -142,7 +135,7 @@ def build_gf_coeff_cf(a, b, Ei=0., exponent=1., sign=1):
     return a, b
 
 
-def build_gf_lanczos(H, V, espace, beta, egs=0., pos=0, repr='cf'):
+def build_gf_lanczos(H, V, espace, beta, egs=0., pos=0, repr='cf', ispin=0):
     """Build Green's function with exact diagonalization.
 
     """
@@ -159,6 +152,8 @@ def build_gf_lanczos(H, V, espace, beta, egs=0., pos=0, repr='cf'):
     irepr =_reprs.index(repr)
     gf_kernel = [continued_fraction, spectral][irepr]
     build_gf_coeff = [build_gf_coeff_cf, build_gf_coeff_sp][irepr]
+    project_exact = [project_exact_up, project_exact_dw][ispin]
+    project = [project_up, project_dw][ispin]
     gf = Gf()
     #
     # Symbols Map:
@@ -177,11 +172,11 @@ def build_gf_lanczos(H, V, espace, beta, egs=0., pos=0, repr='cf'):
         #
         # /__ l
         exponents = np.exp(-beta*(sctI.eigvals-egs))
-        # N+1 (one more up spin)
-        nupJ = nupI+1
-        ndwJ = ndwI
-        # Cannot have more spin than spin states
-        if nupJ <= n:
+        try: # Add spin (N+1 sector)
+            nupJ, ndwJ = get_cdg_sector(n, nupI, ndwI, ispin)
+        except ValueError: # More spin than spin states
+            pass
+        else:
             # Arrival sector
             sctJ = espace.get((nupJ, ndwJ), None) or build_empty_sector(n, nupJ, ndwJ)
             # solve with LAPACK
@@ -212,11 +207,11 @@ def build_gf_lanczos(H, V, espace, beta, egs=0., pos=0, repr='cf'):
                         gf_kernel,
                         *build_gf_coeff(aJ, bJ, sctI.eigvals[iL], exponents[iL])
                     )
-        # N-1 (one more up spin)
-        nupJ = nupI-1
-        ndwJ = ndwI
-        # Cannot have negative spin
-        if nupJ >= 0:
+        try: # Remove spin (N-1 sector)
+            nupJ, ndwJ = get_c_sector(nupI, ndwI, ispin)
+        except ValueError: # Negative spin
+            pass
+        else:
             # Arrival sector
             sctJ = espace.get((nupJ, ndwJ), None) or build_empty_sector(n, nupJ, ndwJ)
             # solve with LAPACK

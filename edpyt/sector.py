@@ -42,3 +42,43 @@ def generate_states(n, p):
     states[0] = initial
     permutations(states)
     return states
+
+
+def get_cdg_sector(n, nup, ndw, ispin):
+    """Get N+1 particle sector by adding particle with `ispin` {0:up,1:down}"""
+    # Add up electron
+    if ispin==0:
+        nupJ = nup+1
+        ndwJ = ndw
+        # Cannot have more spin than spin states
+        if nupJ>n:
+            raise ValueError(f"Out of hilbert.")
+    # Add down electron
+    elif ispin==1:
+        nupJ = nup
+        ndwJ = ndw+1
+        # Cannot have more spin than spin states
+        if ndwJ>n:
+            raise ValueError(f"Out of hilbert.")
+    else:
+        raise RuntimeError(f"Invalid spin index {ispin}. Use 0 for up and 1 for down")
+    return nupJ, ndwJ
+
+
+def get_c_sector(nup, ndw, ispin):
+    """Get N-1 particle sector by adding particle with `ispin` {0:up,1:down}"""
+    # Remove up electron
+    if ispin==0:
+        nupJ = nup-1
+        ndwJ = ndw
+        if nupJ<0:
+            raise ValueError(f"Out of hilbert.")
+    # Remove down electron
+    elif ispin==1:
+        nupJ = nup
+        ndwJ = ndw-1
+        if ndwJ<0:
+            raise ValueError(f"Out of hilbert.")
+    else:
+        raise RuntimeError(f"Invalid spin index {ispin}. Use 0 for up and 1 for down")
+    return nupJ, ndwJ
