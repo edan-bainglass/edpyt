@@ -34,7 +34,7 @@ def test_build_mb_ham():
     params['hfmode'] = False
     params['mu'] = 0.
 
-    n = H.shape[0]
+    n = H.shape[-1]
     nup = 1
     ndw = 1
 

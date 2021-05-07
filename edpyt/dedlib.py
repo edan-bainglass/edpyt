@@ -218,7 +218,7 @@ def build_siam(H, V, U, gfimp):
 
     """
     vk = np.sqrt(gfimp.vk2)
-    n = H.shape[0]
+    n = H.shape[-1]
     H[1:,0] = H[0,1:] = - vk
     H.flat[(n+1)::(n+1)] = gfimp.ek
     H[0,0] = gfimp.e0

@@ -18,6 +18,7 @@ def adjust_mu(gf, occupancy_goal, bracket=(-20.,20)):
     return root_scalar(distance, bracket=bracket, method='brentq').root + gf.mu
 
 
+<<<<<<< HEAD
 def break_spin_symmetry(H, sign, field):
     """Break spin symmetry by applying a symmetry breaking field.
     
@@ -28,6 +29,10 @@ def break_spin_symmetry(H, sign, field):
     H[0,(n+1)::(n+1)] += sign * field
     H[1,(n+1)::(n+1)] -= sign * field
 
+=======
+def break_SU2_symmetry(H):
+    assert H.ndim==3, "Hamiltonina mush "
+>>>>>>> 196babc... dev: add ispin build mb hamilton
 
 class Converged(Exception):
   def __init__(self, message):

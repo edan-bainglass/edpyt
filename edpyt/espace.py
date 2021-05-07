@@ -100,7 +100,7 @@ def build_espace(H, V, neig_sector=None):
     Return:
         eig_space
     """
-    n = H.shape[0]
+    n = H.shape[-1]
 
     espace = defaultdict(Sector)
     if neig_sector is None:
@@ -148,6 +148,7 @@ def build_non_interacting_espace(ek):
 
     n = ek.size
     Uk = np.zeros_like(ek)
+    ek = np.tile(ek, (2,n))
     for nup in range(n+1):
         states_up = generate_states(n, nup)
         dup = states_up.size

@@ -1,7 +1,7 @@
 import numpy as np
 # Compiled
 from numba import njit, prange
-from numba.types import UniTuple, float64, int32, int64, uint32
+from numba.types import UniTuple, float64, int32, int64, uint32, Array
 from numba.experimental import jitclass
 
 # Sparse matrix format
@@ -71,7 +71,7 @@ def empty_csrmat(nnz, shape):
     return cs(data, indptr, indices, shape)
 
 
-@njit(int64(float64[:,:]))
+@njit(int64(Array(float64, 2, 'C', readonly=True)))
 def count_nnz_offdiag(A):
     """Count the number of nonzeros outside the diagonal of A.
 
@@ -85,11 +85,12 @@ def count_nnz_offdiag(A):
     return count
 
 
-@njit(cs_type(float64[:,:],int64))
+@njit(cs_type(Array(float64, 2, 'C', readonly=True),int64))
 def nnz_offdiag_csrmat(A, nnz):
     """Compress off-diagonal elements of A in csr format.
 
     Args:
+        A : matrix, must be readonly.
         nnz : # of nonzero off-diagonal elements.
 
     """
@@ -141,7 +142,8 @@ def add_hoppings(ix_s, states, T, count, sp_mat):
     return count
 
 
-@njit('float64(float64[:],uint32)', parallel=False)
+@njit(float64(Array(float64, 1, 'C', readonly=False),
+      uint32))
 def sum_diags_contrib(diags, s):
     """Sum diagonal energetic contributions for state s.
 
@@ -161,7 +163,9 @@ def sum_diags_contrib(diags, s):
     return res
 
 
-@njit((float64[:],float64[:],uint32[:],uint32[:],float64[:],float64), parallel=False)
+@njit((Array(float64, 2, 'C', readonly=False),
+       Array(float64, 1, 'C', readonly=False),
+       uint32[:],uint32[:],float64[:],float64))
 def add_onsites(ener_diags, int_diags, states_up, states_dw, vec_diag, hfshift):
     """On-site many-body hamiltonian.
 
@@ -174,11 +178,11 @@ def add_onsites(ener_diags, int_diags, states_up, states_dw, vec_diag, hfshift):
 
     for iup in prange(dup):
         sup = states_up[iup]
-        vec_diag_up[iup] = sum_diags_contrib(ener_diags, sup)
+        vec_diag_up[iup] = sum_diags_contrib(ener_diags[0], sup)
 
     for idw in prange(dwn):
         sdw = states_dw[idw]
-        onsite_energy_dw = sum_diags_contrib(ener_diags, sdw)
+        onsite_energy_dw = sum_diags_contrib(ener_diags[1], sdw)
         for iup in range(dup):
             sup = states_up[iup]
             i = iup + idw*dup
@@ -191,16 +195,25 @@ def build_mb_ham(H, V, states_up, states_dw, comm=None):
     """Build sparse Hamiltonian of the sector.
 
     Args:
-        H : Hamiltonian (on-site + hopping) matrix (n x n).
+        H : (np.ndarray, shape=(n,n) or (2,n,n))
+            Hamiltonian matrix including the on-site energies
+            and the hopping terms on the diagonal and off-diagonal
+            entries, respectively. Optional 1st dimension can include
+            spin index with mapping {0:up, 1:dw}.
         V : Interaction matrix (n x n).
         nup : number of up spins
         ndw : number of down spins
         comm : if MPI communicator is given the hilbert space
             is assumed to be diveded along spin-down dimension.
+
+    TODO : make it compatible with H[spin,i,j]
+           idea : eners_diag[spin], add_hoppings(H[spin]).
     """
-    n = H.shape[0]
-    ener_diags = H.diagonal().copy()
+    n = H.shape[-1]
+    H = np.broadcast_to(H, (2,n,n)) if H.ndim==2 else H
+    ener_diags = H.reshape(2,n*n)[:,::n+1].copy()
     int_diags = V.diagonal().copy()
+    H.flags.writeable = False
 
     if abs(params['mu']) > 0.:
         mu = params['mu']
@@ -239,9 +252,9 @@ def build_mb_ham(H, V, states_up, states_dw, comm=None):
         states_dw[rank*dwn_local:(rank+1)*dwn_local],
         vec_diag, hfshift)
 
-    # Hoppings
-    nnz_offdiag = count_nnz_offdiag(H)
-    T = nnz_offdiag_csrmat(H, nnz_offdiag)
+    # Hoppings UP
+    nnz_offdiag = count_nnz_offdiag(H[0])
+    T = nnz_offdiag_csrmat(H[0], nnz_offdiag)
 
     nnz_up_count = nnz_offdiag * int(binom(n-2, nup-1))
     sp_mat_up = empty_csrmat(nnz_up_count, (dup, dup))
@@ -258,6 +271,10 @@ def build_mb_ham(H, V, states_up, states_dw, comm=None):
 
     nnz_dw_count = nnz_offdiag * int(binom(n-2, ndw-1))
     sp_mat_dw = empty_csrmat(nnz_dw_count, (dwn, dwn))
+
+    # Hoppings DW
+    nnz_offdiag = count_nnz_offdiag(H[1])
+    T = nnz_offdiag_csrmat(H[1], nnz_offdiag)
 
     count = 0
     for idw in range(dwn):

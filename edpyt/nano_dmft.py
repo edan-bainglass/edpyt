@@ -56,7 +56,7 @@ class Gfloc:
         idx_inv : the indices of the unique array that reconstruct the input array
     """
     def __init__(self, H, S, Hybrid, idx_neq, idx_inv) -> None:
-        self.n = H.shape[0]
+        self.n = H.shape[-1]
         self.H = H
         self.S = S
         self.Hybrid = Hybrid

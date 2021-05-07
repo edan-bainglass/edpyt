@@ -138,6 +138,8 @@ def build_gf_coeff_cf(a, b, Ei=0., exponent=1., sign=1):
 def build_gf_lanczos(H, V, espace, beta, egs=0., pos=0, repr='cf', ispin=0):
     """Build Green's function with exact diagonalization.
 
+    TODO : make it compatible with gf[spin] since spins may share
+           same hilbert space but have two different onsites and hoppings (AFM).
     """
     #
     #             ______
@@ -148,7 +150,7 @@ def build_gf_lanczos(H, V, espace, beta, egs=0., pos=0, repr='cf', ispin=0):
     #             /_____
     #            N,l,l'.
     #
-    n = H.shape[0]
+    n = H.shape[-1]
     irepr =_reprs.index(repr)
     gf_kernel = [continued_fraction, spectral][irepr]
     build_gf_coeff = [build_gf_coeff_cf, build_gf_coeff_sp][irepr]
