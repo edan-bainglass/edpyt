@@ -63,9 +63,10 @@ def _fit(vals_true: np.ndarray, func_discrete, z, nparams=7, **kwargs):
     # initial guess, random values in the range [-1:1]
     p0 = 2*np.random.random(nparams)-1
     chi = cost_chi(func_discrete, vals_true, z)
-    popt = fmin_bfgs(chi, p0, **kwargs)
-    return func_discrete(popt)
-
+    output = fmin_bfgs(chi, p0, **kwargs)
+    if kwargs.get('full_output', False):
+        return func_discrete(output[0]), output[1] 
+    return output
 
 def fit(x_true, func_discrete, nparams, nmats=100, beta=10, **kwargs):
     """Fit function using matsubara frequencies.
