@@ -269,12 +269,12 @@ def build_mb_ham(H, V, states_up, states_dw, comm=None):
             # Many-Body Hamiltonian
             sp_mat_up)
 
-    nnz_dw_count = nnz_offdiag * int(binom(n-2, ndw-1))
-    sp_mat_dw = empty_csrmat(nnz_dw_count, (dwn, dwn))
-
     # Hoppings DW
     nnz_offdiag = count_nnz_offdiag(H[1])
     T = nnz_offdiag_csrmat(H[1], nnz_offdiag)
+
+    nnz_dw_count = nnz_offdiag * int(binom(n-2, ndw-1))
+    sp_mat_dw = empty_csrmat(nnz_dw_count, (dwn, dwn))
 
     count = 0
     for idw in range(dwn):
@@ -285,7 +285,8 @@ def build_mb_ham(H, V, states_up, states_dw, comm=None):
             count,
             # Many-Body Hamiltonian
             sp_mat_dw)
-
+    
+    H.flags.writeable = True
     return (
         vec_diag,
         csr_matrix(
