@@ -118,6 +118,8 @@ class Gfimp:
 
     def __init__(self, gfimp) -> None:
         self.gfimp = gfimp
+        # self.Delta = np.vectorize(self._Delta, signature='()->(n)')
+        # self.Sigma = np.vectorize(self._Sigma, signature='()->(n)')
 
     def __getattr__(self, name):
         """Default is to return attribute of first impurity."""
@@ -139,9 +141,9 @@ class Gfimp:
     #         gf.fit_weiss_inv(np.ascontiguousarray(weiss_inv[:,i]))
 
     # @vectorize(signature='(),()->(n)')
-    # def Delta(self, z):
-    #     """Hybridization."""
-    #     return np.fromiter((gf.Delta(z) for gf in self.gfimp), complex)
+    def Delta(self, z):
+        """Hybridization."""
+        return np.fromiter((gf.Delta(z) for gf in self.gfimp), complex)
 
     # @vectorize(signature='(),()->(n)')
     def Sigma(self, z):

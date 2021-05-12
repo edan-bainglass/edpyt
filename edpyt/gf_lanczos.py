@@ -93,8 +93,8 @@ def project_dw(pos, op, check_occupation, sctI, sctJ):
         if check_occupation(sdwI, pos): continue
         sgnJ, sdwJ = op(sdwI, pos)
         idwJ = binsearch(sctJ.states.dw, sdwJ)
-        iL = idwI + iupI
-        iM = idwJ + iupJ
+        iL = idwI*sctI.dup + iupI
+        iM = idwJ*sctJ.dup + iupJ
         v0[:,iM] = np.float64(sgnJ)*sctI.eigvecs[iL,:].T
     return v0
 

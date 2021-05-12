@@ -89,8 +89,8 @@ def project_exact_dw(pos, op, check_occupation, sctI, sctJ):
         if check_occupation(sdwI, pos): continue
         sgnJ, sdwJ = op(sdwI, pos)
         idwJ = binsearch(sctJ.states.dw, sdwJ)
-        iL = idwI + iupI
-        iM = idwJ + iupJ
+        iL = idwI*sctI.dup + iupI
+        iM = idwJ*sctJ.dup + iupJ
         v0 += np.float64(sgnJ)*np.einsum('ij,ik->jk',sctJ.eigvecs[iM,:],sctI.eigvecs[iL,:],optimize=True)
     return v0
 
