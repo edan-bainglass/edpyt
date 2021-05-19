@@ -39,6 +39,29 @@ def vectorize(signature=None, kwarg=None):
     return decorator
 
 
+def _get_sigma_method(comm):
+    if comm is not None:
+        def wrap(self, z):
+            # Collect sigmas and expand to non equivalent indices.
+            comm = self.comm
+            sigma_loc = self.Sigma(z)
+            sigma = np.empty(comm.size*sigma_loc.size, sigma_loc.dtype)
+            comm.Allgather([sigma_loc, sigma_loc.size], [sigma, sigma_loc.size])
+            return sigma[self.idx_inv]
+    else:
+        def wrap(self, z):
+            return self.Sigma(z)[self.idx_inv]
+    return wrap
+
+
+def get_idx_world(comm, n):
+    if comm is None:
+        return slice(None)
+    else:
+        stride = n//comm.size
+        return slice(comm.rank*stride,(comm.rank+1)*stride)
+
+
 class Gfloc:
     """nano Local lattice green's function.
 
@@ -50,23 +73,26 @@ class Gfloc:
         idx_neq : the indices of the input array that give the unique values
         idx_inv : the indices of the unique array that reconstruct the input array
     """
-    def __init__(self, H, S, Hybrid, idx_neq, idx_inv) -> None:
+    def __init__(self, H, S, Hybrid, idx_neq, idx_inv, comm=None) -> None:
         self.n = H.shape[-1]
         self.H = H
         self.S = S
         self.Hybrid = Hybrid
-        self.idx_neq = idx_neq
+        self.idx_neq = idx_neq[get_idx_world(comm, len(idx_neq))]
         self.idx_inv = idx_inv
+        self.comm = comm
+        self.get_sigma = _get_sigma_method(comm).__get__(self)
+        # self.idx_world = get_idx_world(comm, len(idx_neq))
 
     @property
     def ed(self):
-        return self.H.diagonal()[self.idx_neq]
+        return self.H.diagonal()[self.idx_neq]#[self.idx_world]
 
     # @vectorize(signature='(),(),()->(n,n)',kwarg=dict(inverse=False))
     def __call__(self, z, inverse=False):
         """Interacting Green's function."""
         x = self.free(z, inverse=True)
-        x.flat[::(self.n+1)] -= self.Sigma(z)[self.idx_inv]
+        x.flat[::(self.n+1)] -= self.get_sigma(z)
         if inverse:
             return x
         return  np.linalg.inv(x)
@@ -85,7 +111,6 @@ class Gfloc:
         #                                       -1
         # Delta(z) = z+mu - Sigma(z) - ( G (z) )
         #                                 ii
-        # gloc_inv = np.reciprocal(self(z).diagonal())[self.idx_neq]
         return z+self.mu-self.ed-self.Weiss(z)
 
     @vectorize(signature='(),()->(n)')
@@ -94,7 +119,7 @@ class Gfloc:
         #  -1                             -1
         # G     (z) = Sigma(z) + ( G (z) )
         #  0,ii                     ii
-        gloc_inv = np.reciprocal(self(z).diagonal())[self.idx_neq]
+        gloc_inv = np.reciprocal(self(z).diagonal())[self.idx_neq]#[self.idx_world]
         return gloc_inv+self.Sigma(z)
 
     # @vectorize(signature='(),(),()->(n,n)',kwarg=dict(inverse=False))
