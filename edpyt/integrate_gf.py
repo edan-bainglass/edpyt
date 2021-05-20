@@ -73,7 +73,7 @@ def integrate_gf(gf, mu=0, T=300, nzp=100, R=1e10):
             n   + n   = 2 * integrate_gf(gf)
             up    dw
     """
-    _gf = lambda z: np.diagonal(np.atleast_2d(gf(z)))
+    # _gf = lambda z: np.diagonal(np.atleast_2d(gf(z)))
     zp, Rp = zero_fermi(nzp)
     N = nzp
 
@@ -82,11 +82,11 @@ def integrate_gf(gf, mu=0, T=300, nzp=100, R=1e10):
     a_p = mu + 1j*zp/beta
 
     R = 1e10
-    mu_0 = 1j*R*_gf(1.j*R)
+    mu_0 = 1j*R*gf(1.j*R)
 
     mu_1 = complex(0)
     for i in range(N):
-        mu_1 += _gf(a_p[i]) * Rp[i]
+        mu_1 += gf(a_p[i]) * Rp[i]
     mu_1 *= -1j*4/beta
 
     rho = np.real(mu_0) + np.imag(mu_1)

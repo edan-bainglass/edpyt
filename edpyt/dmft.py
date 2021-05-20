@@ -1,10 +1,10 @@
-from edpyt.gf_lanczos import build_gf_lanczos
 import numpy as np
 from scipy.optimize import root_scalar, broyden1
 
 from edpyt.integrate_gf import integrate_gf
-from edpyt.fit import fit_hybrid, fit_weiss_inv, g0inv_discrete
+from edpyt.fit import fit_hybrid
 from edpyt.espace import adjust_neigsector, build_espace, screen_espace
+from edpyt.gf_lanczos import build_gf_lanczos
 
 
 def adjust_mu(gf, occupancy_goal, bracket=(-20.,20)):
@@ -16,17 +16,6 @@ def adjust_mu(gf, occupancy_goal, bracket=(-20.,20)):
     """
     distance = lambda mu: np.sum(gf.integrate(mu)-occupancy_goal)
     return root_scalar(distance, bracket=bracket, method='brentq').root + gf.mu
-
-
-# def break_spin_symmetry(H, sign, field):
-#     """Break spin symmetry by applying a symmetry breaking field.
-    
-#     ack.: https://github.com/QcmPlab/LIB_DMFT_ED/blob/master/src/ED_BATH/user_aux.f90
-#     """
-#     assert H.ndim==3, "Hamiltonina must have spin index along 1st dimension."
-#     n = H.shape[-1]
-#     H[0].flat[(n+1)::(n+1)] += sign * field
-#     H[1].flat[(n+1)::(n+1)] -= sign * field
 
 
 class Converged(Exception):
@@ -44,7 +33,7 @@ class Gfimp:
 
     """
 
-    def __init__(self, n, nmats=3000, U=3., beta=1e6, neig=None, tol_fit=10.):
+    def __init__(self, n, nmats=3000, U=3., beta=1e6, neig=None, tol_fit=10., max_fit=3):
         self.n = n
         self.nmats = nmats # Used in Matsubara fit. 
         self.beta = beta # Used in Matsubara fit and interacting green's function.
@@ -54,6 +43,7 @@ class Gfimp:
         self.Delta = None
         self.neig = neig # used in diagonalization
         self.tol_fit = tol_fit
+        self.max_fit = max_fit
 
     def fit(self, Delta):
         """Fit hybridization and update bath params."""
@@ -63,22 +53,12 @@ class Gfimp:
         #                /__k = 0      z - ek
         n = self.n
         fopt = np.inf; it = 0
-        while (fopt>self.tol_fit)&(it<3):
+        while (fopt>self.tol_fit)&(it<self.max_fit):
             Delta_disc, fopt = fit_hybrid(Delta, n-1, self.nmats, self.beta, full_output=True)
             it += 1
         self.Delta = Delta_disc
         self.H[1:,0] = self.H[0,1:] = self.vk
         self.H.flat[(n+1)::(n+1)] = self.ek
-
-    # def fit_weiss_inv(self, Weiss):
-    #     """Fit hybridization and update bath params."""
-    #     # g0inv = (z-e0-Delta(z))
-    #     n = self.n
-    #     g0inv_disc = fit_weiss_inv(Weiss, n-1, self.nmats, self.beta)
-    #     self.update(-g0inv_disc.a0)
-    #     self.Delta = g0inv_disc.Delta
-    #     self.H[1:,0] = self.H[0,1:] = self.vk
-    #     self.H.flat[(n+1)::(n+1)] = self.ek
 
     @property
     def vk(self):
@@ -142,6 +122,9 @@ class Gfimp:
         # Up and Down have same spectrum
         return 2. * integrate_gf(self, mu)
 
+    def __iter__(self):
+        yield self
+
 
 class SpinGfimp:
     """Spin dependent Green's function of SIAM model for FM solutions.
@@ -156,7 +139,7 @@ class SpinGfimp:
     NOTE: Arrays of this class have the general shape = (2, z.size)
     """
 
-    def __init__(self, n, nmats=3000, U=3., beta=1e6, neig=None, tol_fit=10.):
+    def __init__(self, n, nmats=3000, U=3., beta=1e6, neig=None, tol_fit=10., max_fit=3):
         self.nmats = nmats # Used in Matsubara fit. 
         self.beta = beta # Used in Matsubara fit and interacting green's function.
         self.n = n
@@ -176,6 +159,7 @@ class SpinGfimp:
             gfimp.nmats = nmats
             gfimp.beta = beta
             gfimp.tol_fit = tol_fit
+            gfimp.max_fit = max_fit
             gfimp.H = self.H[s]
             gfimp.V = self.V
             self.gfimp[s] = gfimp
@@ -203,30 +187,8 @@ class SpinGfimp:
     def dw(self):
         return self.gfimp[1]
 
-    # def free(self, z, inverse=False):
-    #     """Non-interacting green's function."""
-    #     #                 1
-    #     # g  =    -----------------
-    #     #         z + mu - Delta(z)
-    #     z = np.atleast_1d(z)
-    #     g0 = np.empty((2, z.size), complex)
-    #     for s, gfimp in enumerate(self):
-    #         g0[s,:] = gfimp.free(z, inverse)
-    #     return g0
-
-    # def __call__(self, z):
-    #     """Interacting green's function."""
-    #     #                    1
-    #     # g  =    ----------------------------
-    #     #  0      z + mu - Delta(z) - Sigma(z)
-    #     z = np.atleast_1d(z)
-    #     gf = np.empty((2, z.size), complex)
-    #     for s, gfimp in enumerate(self):
-    #         gf[s,:] = gfimp(z) 
-    #     return gf
-
-    def __iter__(self):
-        yield from self.gfimp
+    def Sigma(self, z):
+        return np.stack([gf.Sigma(z) for gf in self])
 
     def solve(self):
         """Solve impurity model."""
@@ -239,14 +201,18 @@ class SpinGfimp:
         self.espace = espace
         self.egs = egs
 
+    def spin_symmetrize(self):
+        self.dw.H[:] = self.up.H[:]
+        self.dw.Delta = self.up.Delta
+
     # Helpers
 
     def integrate(self, mu=None):
         # Up and Down do NOT have same spectrum (in theory).
         return sum(integrate_gf(gfimp, mu) for gfimp in self)
 
-    # def break_spin_symmetry(self, sign, field):
-    #     break_spin_symmetry(self.H, sign, field)
+    def __iter__(self):
+        yield from self.gfimp
 
 
 class Gfloc:
@@ -329,9 +295,16 @@ class Gfhilbert(Gfloc):
         return g0
 
 
+# def dmft_step(delta, gfimp, gfloc):
+#     """Perform a DMFT self-consistency step."""
+#     gfimp.fit(delta) # at matsubara frequencies
+#     gfimp.solve()
+#     gfloc.set_local(gfimp.Sigma)
+
 def dmft_step(delta, gfimp, gfloc):
     """Perform a DMFT self-consistency step."""
     gfimp.fit(delta) # at matsubara frequencies
+    gfimp.update(gfloc.mu-gfloc.ed)
     gfimp.solve()
     gfloc.set_local(gfimp.Sigma)
 
@@ -340,22 +313,32 @@ def dmft_step_adjust(delta, gfimp, gfloc, occupancy_goal):
     """Perform a DMFT self-consistency step and adjust chemical potential to 
     target occupation (for both local and impurity green's functions."""
     dmft_step(delta, gfimp, gfloc)
-    mu = adjust_mu(gfimp, occupancy_goal)
-    gfimp.update(mu)
+    # mu = adjust_mu(gfimp, occupancy_goal)
+    mu = adjust_mu(gfloc, occupancy_goal)
+    # gfimp.update(mu)
     gfloc.update(mu)
 
 
-def dmft_step_adjust_ext(delta, gfimp, gfloc):
-    """Set chemical potential and perform a DMFT self-consistency step.
-    The chemical potential is the first entry of the delta array and is
-    adjusted by an external minimizer during the self consistency loop."""
-    mu, delta = delta[0], delta[1:]
-    gfimp.update(mu)
-    gfloc.update(mu)
-    dmft_step(delta, gfimp, gfloc)
+# def dmft_step_adjust_ext(delta, gfimp, gfloc):
+#     """Set chemical potential and perform a DMFT self-consistency step.
+#     The chemical potential is the first entry of the delta array and is
+#     adjusted by an external minimizer during the self consistency loop."""
+#     mu, delta = delta[0], delta[1:]
+#     gfimp.update(mu)
+#     gfloc.update(mu)
+#     dmft_step(delta, gfimp, gfloc)
 
 
-class _DMFT:
+def dmft_step_magnetic(delta, gfimp, gfloc, sign, field):
+    gfimp.up.fit(delta)
+    gfimp.spin_symmetrize()
+    gfimp.up.update(gfloc.mu+sign*field-gfloc.ed)
+    gfimp.dw.update(gfloc.mu-sign*field-gfloc.ed)
+    gfimp.solve()
+    gfloc.set_local(gfimp.Sigma)
+
+
+class DMFT:
     """Base class for DMFT self-consistent loop.
     
     Sub classes can overwrite the methods:
@@ -385,18 +368,23 @@ class _DMFT:
         wn = (2*np.arange(gfimp.nmats)+1)*np.pi/gfimp.beta
         self.z = 1.j*wn
 
-    def initialize(self, U):
-        Sigma = lambda z: U * self.occupancy_goal / 2.
+    def initialize(self, U, Sigma):
         mu = U/2.
         self.gfloc.set_local(Sigma)
         self.gfloc.update(mu)
         self.gfimp.update(mu)
         return self.gfloc.Delta(self.z)
 
+    def initialize_magnetic(self, U, Sigma, sign, field):
+        delta = self.initialize(U, Sigma)
+        dmft_step_magnetic(delta, self.gfimp, self.gfloc, sign, field)
+        return self.gfloc.Delta(self.z)
+
     def step(self, delta):
         dmft_step(delta, self.gfimp, self.gfloc)
         delta_new = self.gfloc.Delta(self.z)
-        occp = self.gfimp.integrate()
+        # occp = self.gfimp.integrate()
+        occp = self.gfloc.integrate()
         return occp, delta_new
 
     def distance(self, delta):
@@ -439,66 +427,66 @@ class _DMFT:
             self.solve_with_broyden_mixing(delta, **kwargs)
 
 
-class _DMFTadjust(_DMFT):
-    """
-    As compare to the base DMFT class,
-    at each iteration step the chemical potential is adjusted
-    to obatin the target occupation, given the current set of 
-    parameters. 
+# class _DMFTadjust(_DMFT):
+#     """
+#     As compare to the base DMFT class,
+#     at each iteration step the chemical potential is adjusted
+#     to obatin the target occupation, given the current set of 
+#     parameters. 
     
-    NOTE: The impurity green's function is used to obatin 
-    the current occupation.
-    """
+#     NOTE: The impurity green's function is used to obatin 
+#     the current occupation.
+#     """
     
-    def step(self, delta):
-        dmft_step_adjust(delta, self.gfimp, self.gfloc, self.occupancy_goal)
-        delta_new = self.gfloc.Delta(self.z)
-        occp = self.gfimp.integrate()
-        return occp, delta_new
+#     def step(self, delta):
+#         dmft_step_adjust(delta, self.gfimp, self.gfloc, self.occupancy_goal)
+#         delta_new = self.gfloc.Delta(self.z)
+#         occp = self.gfimp.integrate()
+#         return occp, delta_new
 
 
-class _DMFTadjustext(_DMFT):
-    """
-    As compared to the others, let the minimizer adjust
-    the chemical potential. The first entry of the variable 
-    `delta` contains the chemical potential. The first entry
-    in the `eps` variable contains the difference between
-    the current and the target occupation.
-    """
+# class _DMFTadjustext(_DMFT):
+#     """
+#     As compared to the others, let the minimizer adjust
+#     the chemical potential. The first entry of the variable 
+#     `delta` contains the chemical potential. The first entry
+#     in the `eps` variable contains the difference between
+#     the current and the target occupation.
+#     """
     
-    def initialize(self, U):
-        delta = np.empty(self.z.size+1, complex)
-        delta[1:] = super().initialize(U)
-        delta[0] = self.gfimp.mu
-        return delta
+#     def initialize(self, U):
+#         delta = np.empty(self.z.size+1, complex)
+#         delta[1:] = super().initialize(U)
+#         delta[0] = self.gfimp.mu
+#         return delta
 
-    def step(self, delta):
-        dmft_step_adjust_ext(delta, self.gfimp, self.gfloc)
-        delta_new = np.empty_like(delta)
-        delta_new[1:] = self.gfloc.Delta(self.z)
-        delta_new[0] = self.gfimp.integrate()
-        return delta_new[0], delta_new
+#     def step(self, delta):
+#         dmft_step_adjust_ext(delta, self.gfimp, self.gfloc)
+#         delta_new = np.empty_like(delta)
+#         delta_new[1:] = self.gfloc.Delta(self.z)
+#         delta_new[0] = self.gfimp.integrate()
+#         return delta_new[0], delta_new
 
-    def distance(self, delta):
-        eps = self(delta) - delta
-        eps[0] = sum(delta[0] - self.occupancy_goal)
-        return eps
+#     def distance(self, delta):
+#         eps = self(delta) - delta
+#         eps[0] = sum(delta[0] - self.occupancy_goal)
+#         return eps
 
 
-def solve(gfimp, gfloc, occupancy_goal=None, max_iter=20, tol=1e-3, 
-          occp_method=None, mixing_method='broyden'):
+# def solve(gfimp, gfloc, occupancy_goal=None, max_iter=20, tol=1e-3, 
+#           occp_method=None, mixing_method='broyden'):
     
-    if occp_method is None:
-        dmft_solver = _DMFT(gfimp, gfloc, max_iter=max_iter, tol=tol)
+#     if occp_method is None:
+#         dmft_solver = _DMFT(gfimp, gfloc, max_iter=max_iter, tol=tol)
     
-    elif occp_method == 'adjust':
-        dmft_solver = _DMFTadjust(gfimp, gfloc, occupancy_goal, max_iter, tol)    
+#     elif occp_method == 'adjust':
+#         dmft_solver = _DMFTadjust(gfimp, gfloc, occupancy_goal, max_iter, tol)    
     
-    elif occp_method == 'adjust_ext':
-        dmft_solver = _DMFTadjustext(gfimp, gfloc, occupancy_goal, max_iter, tol)
+#     elif occp_method == 'adjust_ext':
+#         dmft_solver = _DMFTadjustext(gfimp, gfloc, occupancy_goal, max_iter, tol)
     
-    else:
-        raise ValueError("Invalid occupation method. Choose between None, adjust, adjust_ext.")
+#     else:
+#         raise ValueError("Invalid occupation method. Choose between None, adjust, adjust_ext.")
 
-    delta = dmft_solver.initialize()
-    dmft_solver.solve(delta, mixing_method=mixing_method)
+#     delta = dmft_solver.initialize()
+#     dmft_solver.solve(delta, mixing_method=mixing_method)

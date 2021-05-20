@@ -1,42 +1,7 @@
 import numpy as np
 
 from edpyt.integrate_gf import integrate_gf
-from edpyt.dmft import _DMFT, adjust_mu
-
-from functools import wraps
-
-
-def vectorize(signature=None, kwarg=None):
-    """Vectorize output of a function.
-    
-    If `kwarg` is not None, check if `kwarg` is absent when 
-    target function is called (wrapper) and automatically add 
-    default `kwarg` to match signature's # of input arguments.
-
-    NOTE : `signature` must include the keyword 
-    argument, if this is present.
-
-    Args:
-        signature : (str)
-            Generalized universal function signature.
-        kwargs : (dict, optional)
-            Default keyword argument.
-    
-    """
-    def decorator(fn):
-        vectorized = np.vectorize(fn, signature=signature)
-        if kwarg is not None:
-            @wraps(fn)
-            def wrapper(*args,**kw):
-                # Add default `kwarg` if kw is not specified.
-                _kw = kw or kwarg
-                return vectorized(*args,**_kw)
-        else:
-            @wraps(fn)
-            def wrapper(*args):
-                return vectorized(*args)
-        return wrapper
-    return decorator
+# from edpyt.dmft import _DMFT, adjust_mu
 
 
 def _get_sigma_method(comm):
@@ -47,14 +12,16 @@ def _get_sigma_method(comm):
             sigma_loc = self.Sigma(z)
             sigma = np.empty(comm.size*sigma_loc.size, sigma_loc.dtype)
             comm.Allgather([sigma_loc, sigma_loc.size], [sigma, sigma_loc.size])
-            return sigma[self.idx_inv]
+            shape = list(sigma_loc.shape)
+            shape[0] *= comm.size
+            return sigma.reshape(shape)
     else:
         def wrap(self, z):
-            return self.Sigma(z)[self.idx_inv]
+            return self.Sigma(z)
     return wrap
 
 
-def get_idx_world(comm, n):
+def _get_idx_world(comm, n):
     if comm is None:
         return slice(None)
     else:
@@ -78,24 +45,26 @@ class Gfloc:
         self.H = H
         self.S = S
         self.Hybrid = Hybrid
-        self.idx_neq = idx_neq[get_idx_world(comm, len(idx_neq))]
+        self.idx_neq = idx_neq[_get_idx_world(comm, len(idx_neq))]
         self.idx_inv = idx_inv
         self.comm = comm
         self.get_sigma = _get_sigma_method(comm).__get__(self)
-        # self.idx_world = get_idx_world(comm, len(idx_neq))
 
     @property
     def ed(self):
-        return self.H.diagonal()[self.idx_neq]#[self.idx_world]
+        return self.H.diagonal()[self.idx_neq]
 
-    # @vectorize(signature='(),(),()->(n,n)',kwarg=dict(inverse=False))
-    def __call__(self, z, inverse=False):
+    def __call__(self, z):
         """Interacting Green's function."""
-        x = self.free(z, inverse=True)
-        x.flat[::(self.n+1)] -= self.get_sigma(z)
-        if inverse:
-            return x
-        return  np.linalg.inv(x)
+        z = np.atleast_1d(z)
+        sigma = self.get_sigma(z)
+        it = np.nditer([sigma, z, None], flags=['external_loop'], order='F')
+        with it:
+            for sigma_, z_, out in it:
+                x = self.free(z_[0], inverse=True)
+                x.flat[::(self.n+1)] -= sigma_[self.idx_inv]
+                out[...] = np.linalg.inv(x).diagonal()[self.idx_neq]
+            return it.operands[2]
 
     def update(self, mu):
         """Update chemical potential."""
@@ -103,26 +72,35 @@ class Gfloc:
 
     def set_local(self, Sigma):
         """Set impurity self-energy to diagonal elements of local self-energy!"""
+        #
+        # TODO : actually compute and store sigma.
+        #
         self.Sigma = Sigma
 
-    @vectorize(signature='(),()->(n)')
     def Delta(self, z):
         """Hybridization."""
         #                                       -1
         # Delta(z) = z+mu - Sigma(z) - ( G (z) )
         #                                 ii
-        return z+self.mu-self.ed-self.Weiss(z)
+        z = np.atleast_1d(z)
+        weiss = self.Weiss(z)
+        ndim = weiss.ndim-1
+        it = np.nditer([self.ed, weiss, z, None], 
+                        op_axes=[[0]+[-1]*ndim,None,[-1]*ndim+[0],None], 
+                        flags=['external_loop'], order='F')
+        with it:
+            for ed, weiss, z, out in it:
+                out[...] = z+self.mu-ed-weiss
+            return it.operands[3]
 
-    @vectorize(signature='(),()->(n)')
     def Weiss(self, z):
         """Weiss field."""
         #  -1                             -1
         # G     (z) = Sigma(z) + ( G (z) )
         #  0,ii                     ii
-        gloc_inv = np.reciprocal(self(z).diagonal())[self.idx_neq]#[self.idx_world]
+        gloc_inv = np.reciprocal(self(z))
         return gloc_inv+self.Sigma(z)
 
-    # @vectorize(signature='(),(),()->(n,n)',kwarg=dict(inverse=False))
     def free(self, z, inverse=False):
         """Non-interacting green's function."""
         #                                       -1
@@ -136,15 +114,16 @@ class Gfloc:
     # Helper
 
     def integrate(self, mu=0.):
-        return 2. * integrate_gf(self, mu)
+        occps = np.squeeze(integrate_gf(self, mu)[self.idx_inv,...])
+        if occps.ndim<2:
+            return 2. * occps.sum()
+        return occps.sum()
 
 
 class Gfimp:
 
     def __init__(self, gfimp) -> None:
         self.gfimp = gfimp
-        # self.Delta = np.vectorize(self._Delta, signature='()->(n)')
-        # self.Sigma = np.vectorize(self._Sigma, signature='()->(n)')
 
     def __getattr__(self, name):
         """Default is to return attribute of first impurity."""
@@ -152,33 +131,34 @@ class Gfimp:
 
     def update(self, mu):
         """Updated chemical potential."""
-        for gf in self:
-            gf.update(mu)
+        mu = np.broadcast_to(mu, len(self))
+        for i, gf in enumerate(self):
+            gf.update(mu[i])
+
+    @property
+    def up(self):
+        return Gfimp([gf.up for gf in self])
+
+    @property
+    def dw(self):
+        return Gfimp([gf.dw for gf in self])
 
     def fit(self, delta):
         """Fit discrete bath."""
         for i, gf in enumerate(self):
-            gf.fit(delta[...,i])
+            gf.fit(delta[i,...])
 
-    # def fit_weiss_inv(self, weiss_inv):
-    #     """Fit discrete bath."""
-    #     for i, gf in enumerate(self):
-    #         gf.fit_weiss_inv(np.ascontiguousarray(weiss_inv[:,i]))
-
-    # @vectorize(signature='(),()->(n)')
-    def Delta(self, z):
-        """Hybridization."""
-        return np.fromiter((gf.Delta(z) for gf in self.gfimp), complex)
-
-    # @vectorize(signature='(),()->(n)')
     def Sigma(self, z):
         """Correlated self-energy."""
-        return np.fromiter((gf.Sigma(z) for gf in self.gfimp), complex)
+        return np.stack([gf.Sigma(z) for gf in self])
 
-    # @vectorize(signature='(),(),()->(n)',kwarg=dict(inverse=False))
-    # def free(self, z, inverse=False):
-    #     """Correlated self-energy."""
-    #     return np.fromiter((gf.free(z, inverse=inverse) for gf in self.gfimp), complex)
+    def solve(self):
+        for gf in self:
+            gf.solve()
+
+    def spin_symmetrize(self):
+        for gf in self:
+            gf.spin_symmetrize()
 
     def __getitem__(self, i):
         return self.gfimp[i]
@@ -190,86 +170,86 @@ class Gfimp:
         yield from iter(self.gfimp)
 
 
-def dmft_step(delta, gfimp, gfloc):
-    """Perform a DMFT self-consistency step."""
-    for i, gf in enumerate(gfimp):
-        gf.fit(delta[:,i])
-        gf.update(gfloc.mu-gfloc.ed[i])
-        gf.solve()
-    gfloc.set_local(gfimp.Sigma)
+# def dmft_step(delta, gfimp, gfloc):
+#     """Perform a DMFT self-consistency step."""
+#     for i, gf in enumerate(gfimp):
+#         gf.fit(delta[i,...])
+#         gf.update(gfloc.mu-gfloc.ed[i])
+#         gf.solve()
+#     gfloc.set_local(gfimp.Sigma)
 
 
-def dmft_step_adjust(delta, gfimp, gfloc, occupancy_goal):
-    """Perform a DMFT self-consistency step and adjust chemical potential to 
-    target occupation (for both local and impurity green's functions."""
-    dmft_step(delta, gfimp, gfloc)
-    mu = adjust_mu(gfloc, occupancy_goal)
-    gfloc.update(mu)
+# def dmft_step_adjust(delta, gfimp, gfloc, occupancy_goal):
+#     """Perform a DMFT self-consistency step and adjust chemical potential to 
+#     target occupation (for both local and impurity green's functions."""
+#     dmft_step(delta, gfimp, gfloc)
+#     mu = adjust_mu(gfloc, occupancy_goal)
+#     gfloc.update(mu)
 
 
-def dmft_step_adjust_ext(delta, gfimp, gfloc):
-    """Set chemical potential and perform a DMFT self-consistency step.
-    The chemical potential is the first entry of the delta array and is
-    adjusted by an external minimizer during the self consistency loop."""
-    mu, delta = delta[0], delta[1:].reshape(-1,len(gfimp))
-    gfimp.update(mu)
-    gfloc.update(mu)
-    dmft_step(delta, gfimp, gfloc)
+# def dmft_step_adjust_ext(delta, gfimp, gfloc):
+#     """Set chemical potential and perform a DMFT self-consistency step.
+#     The chemical potential is the first entry of the delta array and is
+#     adjusted by an external minimizer during the self consistency loop."""
+#     mu, delta = delta[0], delta[1:].reshape(-1,len(gfimp))
+#     gfimp.update(mu)
+#     gfloc.update(mu)
+#     dmft_step(delta, gfimp, gfloc)
 
 
-class _nanoDMFT(_DMFT):
+# class _nanoDMFT(_DMFT):
 
-    def step(self, delta):
-        dmft_step(delta, self.gfimp, self.gfloc)
-        delta_new = self.gfloc.Delta(self.z)
-        occp = sum(self.gfloc.integrate())
-        return occp, delta_new
-
-
-class _nanoDMFTadjust(_DMFT):
-
-    def step(self, delta):
-        dmft_step_adjust(delta, self.gfimp, self.gfloc, self.occupancy_goal[self.gfloc.idx_inv])
-        delta_new = self.gfloc.Delta(self.z)
-        occp = sum(self.gfloc.integrate())
-        return occp, delta_new
+#     def step(self, delta):
+#         dmft_step(delta, self.gfimp, self.gfloc)
+#         delta_new = self.gfloc.Delta(self.z)
+#         occp = sum(self.gfloc.integrate().flat[self.gfloc.idx_inv])
+#         return occp, delta_new
 
 
-class _nanoDMFTadjustext(_DMFT):
+# class _nanoDMFTadjust(_DMFT):
 
-    def initialize(self, U):
-        delta = np.empty(1+self.z.size*len(self.gfimp), complex)
-        delta[1:] = super().initialize(U).flat
-        delta[0] = self.gfimp.mu
-        return delta
-
-    def step(self, delta):
-        dmft_step_adjust_ext(delta, self.gfimp, self.gfloc)
-        delta_new = np.empty_like(delta)
-        delta_new[1:] = self.gfloc.Delta(self.z)
-        delta_new[0] = sum(self.gfimp.integrate())
-        return delta_new[0], delta_new
-
-    def distance(self, delta):
-        eps = self(delta) - delta
-        eps[0] = sum(delta[0] - self.occupancy_goal)
-        return eps
+#     def step(self, delta):
+#         dmft_step_adjust(delta, self.gfimp, self.gfloc, self.occupancy_goal)
+#         delta_new = self.gfloc.Delta(self.z)
+#         occp = sum(self.gfloc.integrate().flat[self.gfloc.idx_inv])
+#         return occp, delta_new
 
 
-def solve(gfimp, gfloc, occupancy_goal=None, max_iter=20, tol=1e-3, 
-          occp_method=None, mixing_method='broyden'):
+# class _nanoDMFTadjustext(_DMFT):
+
+#     def initialize(self, U):
+#         delta = np.empty(1+self.z.size*len(self.gfimp), complex)
+#         delta[1:] = super().initialize(U).flat
+#         delta[0] = self.gfimp.mu
+#         return delta
+
+#     def step(self, delta):
+#         dmft_step_adjust_ext(delta, self.gfimp, self.gfloc)
+#         delta_new = np.empty_like(delta)
+#         delta_new[1:] = self.gfloc.Delta(self.z)
+#         delta_new[0] = sum(self.gfimp.integrate())
+#         return delta_new[0], delta_new
+
+#     def distance(self, delta):
+#         eps = self(delta) - delta
+#         eps[0] = sum(delta[0] - self.occupancy_goal)
+#         return eps
+
+
+# def solve(gfimp, gfloc, occupancy_goal=None, max_iter=20, tol=1e-3, 
+#           occp_method=None, mixing_method='broyden'):
     
-    if occp_method is None:
-        dmft_solver = _nanoDMFT(gfimp, gfloc, max_iter=max_iter, tol=tol)
+#     if occp_method is None:
+#         dmft_solver = _nanoDMFT(gfimp, gfloc, max_iter=max_iter, tol=tol)
     
-    elif occp_method == 'adjust':
-        dmft_solver = _nanoDMFTadjust(gfimp, gfloc, occupancy_goal, max_iter, tol)    
+#     elif occp_method == 'adjust':
+#         dmft_solver = _nanoDMFTadjust(gfimp, gfloc, occupancy_goal, max_iter, tol)    
     
-    elif occp_method == 'adjust_ext':
-        dmft_solver = _nanoDMFTadjustext(gfimp, gfloc, occupancy_goal, max_iter, tol)
+#     elif occp_method == 'adjust_ext':
+#         dmft_solver = _nanoDMFTadjustext(gfimp, gfloc, occupancy_goal, max_iter, tol)
     
-    else:
-        raise ValueError("Invalid occupation method. Choose between None, adjust, adjust_ext.")
+#     else:
+#         raise ValueError("Invalid occupation method. Choose between None, adjust, adjust_ext.")
 
-    delta = dmft_solver.initialize()
-    dmft_solver.solve(delta, mixing_method=mixing_method)
+#     delta = dmft_solver.initialize()
+#     dmft_solver.solve(delta, mixing_method=mixing_method)

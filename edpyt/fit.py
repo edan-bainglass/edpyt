@@ -17,9 +17,9 @@ def hybrid_discrete(params):
     #               /____ i=0
     a = params[:params.size//2]
     b = params[params.size//2:]
-    def inner(z):
+    def inner(z, out=None):
         z = np.atleast_1d(z)
-        return np.einsum('i,i,ki->k',b,np.conj(b),np.reciprocal(z[:,None]-a[None,:]))
+        return np.einsum('i,i,ki->k',b,np.conj(b),np.reciprocal(z[:,None]-a[None,:]),out=out)
     inner.a = a
     inner.b = b
     return inner
