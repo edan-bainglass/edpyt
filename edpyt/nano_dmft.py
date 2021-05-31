@@ -21,6 +21,22 @@ def _get_sigma_method(comm):
     return wrap
 
 
+def _get_occps_method(comm):
+    if comm is not None:
+        def wrap(self, mu):
+            occps_loc = integrate_gf(self, mu)
+            occps = np.empty(occps_loc.size*self.comm.size, occps_loc.dtype)
+            self.comm.Allgather([occps_loc, occps_loc.size], [occps, occps_loc.size])
+            shape = list(occps_loc.shape)
+            shape[0] *= self.comm.size
+            return np.squeeze(occps.reshape(shape)[self.idx_inv,...])
+    else:
+        def wrap(self, mu):
+            occps = integrate_gf(self, mu)
+            return np.squeeze(occps[self.idx_inv,...])
+    return wrap
+
+
 def _get_idx_world(comm, n):
     if comm is None:
         return slice(None)
@@ -45,10 +61,12 @@ class Gfloc:
         self.H = H
         self.S = S
         self.Hybrid = Hybrid
-        self.idx_neq = idx_neq[_get_idx_world(comm, len(idx_neq))]
+        self.idx_world = _get_idx_world(comm, len(idx_neq))
+        self.idx_neq = idx_neq[self.idx_world]#_get_idx_world(comm, len(idx_neq))]
         self.idx_inv = idx_inv
         self.comm = comm
         self.get_sigma = _get_sigma_method(comm).__get__(self)
+        self.get_occps = _get_occps_method(comm).__get__(self)
 
     @property
     def ed(self):
@@ -65,6 +83,8 @@ class Gfloc:
                 x.flat[::(self.n+1)] -= sigma_[self.idx_inv]
                 out[...] = np.linalg.inv(x).diagonal()[self.idx_neq]
             return it.operands[2]
+                # out[self.idx_world,...] = np.linalg.inv(x).diagonal()[self.idx_neq]
+            # return it.operands[2][self.idx_world,...]
 
     def update(self, mu):
         """Update chemical potential."""
@@ -114,7 +134,17 @@ class Gfloc:
     # Helper
 
     def integrate(self, mu=0.):
-        occps = np.squeeze(integrate_gf(self, mu)[self.idx_inv,...])
+        occps = self.get_occps(mu)
+        # occps_loc = integrate_gf(self, mu)
+        # if self.comm is not None:
+        #     occps = np.empty(occps_loc.size*self.comm.size, occps_loc.dtype)
+        #     self.comm.Allgather([occps_loc, occps_loc.size], [occps, occps_loc.size])
+        #     shape = list(occps_loc.shape)
+        #     shape[0] *= self.comm.size
+        #     occps.shape = shape
+        # else:
+        #     occps = occps_loc
+        # occps = np.squeeze(occps[self.idx_inv,...])
         if occps.ndim<2:
             return 2. * occps.sum()
         return occps.sum()

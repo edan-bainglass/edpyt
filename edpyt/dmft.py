@@ -367,6 +367,7 @@ class DMFT:
         self.max_iter = max_iter
         wn = (2*np.arange(gfimp.nmats)+1)*np.pi/gfimp.beta
         self.z = 1.j*wn
+        self.delta = None
 
     def initialize(self, U, Sigma):
         mu = U/2.
@@ -393,6 +394,7 @@ class DMFT:
 
     def __call__(self, delta):
         print(f'Iteration : {self.it:2}')
+        self.delta = delta
         non_causal = delta.imag>0 # ensures that the imaginary part is negative
         delta[non_causal].imag = -1e-20
         occp, delta_new = self.step(delta)

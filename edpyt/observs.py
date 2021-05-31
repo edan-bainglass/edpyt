@@ -2,6 +2,25 @@ import numpy as np
 from edpyt.operators import n_op
 
 
+def get_occupation(espace, egs, beta, n):
+    """Count particles in espace eigen-state vectors (size=dup x dwn).
+
+    """
+    nup = np.zeros(n)
+    ndw = np.zeros(n)
+    Z = 0. # Partition function
+    for sct in espace.values():
+        exps = np.exp(-beta*(sct.eigvals-egs))
+        evecs = sct.eigvecs
+        nup_nev, ndw_nev = get_evecs_occupation(evecs,sct.states.up,sct.states.dw,n,exps)
+        nup += nup_nev.sum(1)
+        ndw += ndw_nev.sum(1)
+        Z += exps.sum()
+    nup /= Z
+    ndw /= Z
+    return nup, ndw
+
+
 def get_evecs_occupation(evecs, states_up, states_dw, n, coeffs=None, comm=None):
     """Count spin occupations in eigen-state vectors.
 

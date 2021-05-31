@@ -10,4 +10,4 @@
 *.log
 ipynbs
 .vscode
-
+__pycache__
