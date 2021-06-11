@@ -135,7 +135,7 @@ def build_gf_coeff_cf(a, b, Ei=0., exponent=1., sign=1):
     return a, b
 
 
-def build_gf_lanczos(H, V, espace, beta, egs=0., pos=0, repr='cf', ispin=0):
+def build_gf_lanczos(H, V, espace, beta, egs=0., pos=0, repr='cf', ispin=0, separate=False):
     """Build Green's function with exact diagonalization.
 
     TODO : make it compatible with gf[spin] since spins may share
@@ -156,7 +156,11 @@ def build_gf_lanczos(H, V, espace, beta, egs=0., pos=0, repr='cf', ispin=0):
     build_gf_coeff = [build_gf_coeff_cf, build_gf_coeff_sp][irepr]
     project_exact = [project_exact_up, project_exact_dw][ispin]
     project = [project_up, project_dw][ispin]
-    gf = Gf()
+    gfe = Gf()
+    if separate:
+        gfh = Gf()
+    else:
+        gfh = gfe
     #
     # Symbols Map:
     #    N -> I
@@ -192,7 +196,7 @@ def build_gf_lanczos(H, V, espace, beta, egs=0., pos=0, repr='cf', ispin=0):
                 # EJ-EI
                 l = sctJ.eigvals[:,None] - sctI.eigvals[None,:]
                 q = bJ**2 * exponents[None,:]
-                gf.add(
+                gfe.add(
                     spectral,
                     l.reshape(-1,), q.reshape(-1,)
                 )
@@ -205,7 +209,7 @@ def build_gf_lanczos(H, V, espace, beta, egs=0., pos=0, repr='cf', ispin=0):
                 )
                 for iL in range(sctI.eigvals.size):
                     aJ, bJ = build_sl_tridiag(matvec, v0[iL])
-                    gf.add(
+                    gfe.add(
                         gf_kernel,
                         *build_gf_coeff(aJ, bJ, sctI.eigvals[iL], exponents[iL])
                     )
@@ -227,7 +231,7 @@ def build_gf_lanczos(H, V, espace, beta, egs=0., pos=0, repr='cf', ispin=0):
                 # EI-EJ
                 l = - sctJ.eigvals[:,None] + sctI.eigvals[None,:]
                 q = bJ**2 * exponents[None,:]
-                gf.add(
+                gfh.add(
                     spectral,
                     l.reshape(-1,), q.reshape(-1,)
                 )
@@ -240,7 +244,7 @@ def build_gf_lanczos(H, V, espace, beta, egs=0., pos=0, repr='cf', ispin=0):
                 )
                 for iL in range(sctI.eigvals.size):
                     aJ, bJ = build_sl_tridiag(matvec, v0[iL])
-                    gf.add(
+                    gfh.add(
                         gf_kernel,
                         *build_gf_coeff(aJ, bJ, sctI.eigvals[iL], exponents[iL], sign=-1)
                     )
@@ -248,6 +252,9 @@ def build_gf_lanczos(H, V, espace, beta, egs=0., pos=0, repr='cf', ispin=0):
     # Partition function (Z)
     Z = sum(np.exp(-beta*(sct.eigvals-egs)).sum() for
         (nup, ndw), sct in espace.items())
-    gf.Z = Z
+    gfe.Z = Z
+    gfh.Z = Z
 
-    return gf
+    if separate:
+        return gfe, gfh
+    return gfe

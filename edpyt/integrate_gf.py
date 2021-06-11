@@ -79,7 +79,12 @@ def integrate_gf(gf, mu=0, T=300, nzp=100, R=1e10):
 
     k_B = k / e # Boltzmann constant [eV/K] 8.6173303e-05
     beta = 1/(k_B*T)
-    a_p = mu + 1j*zp/beta
+    if np.isscalar(mu):
+        a_p = mu + 1j*zp/beta
+    else:
+        mu = np.broadcast_to(mu, (nzp,)+mu.shape)
+        zp = np.resize(zp, mu.shape)
+        a_p = mu + 1j*zp/beta
 
     R = 1e10
     mu_0 = 1j*R*gf(1.j*R)
