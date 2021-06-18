@@ -75,8 +75,8 @@ def project_add(A, lead_extract, lead_inject, ispin_i, ispin_j, nupI, ndwI, espa
     pos_c = np.where(A[lead_inject]>1e-18)[0]
     for pos_j in pos_cdg:
         v_JI += A2[lead_extract,pos_j] * sgnI * proj_ispin_j(pos_j, cdg, not_full, sctI, sctJ)
-        for pos_i in pos_c:
-            v_FJ += A2[lead_inject,pos_i] * sgnJ * proj_ispin_i(pos_i, c, not_empty, sctJ, sctF)
+    for pos_i in pos_c:
+        v_FJ += A2[lead_inject,pos_i] * sgnJ * proj_ispin_i(pos_i, c, not_empty, sctJ, sctF)
     dE = sctF.eigvals[:,None]-sctI.eigvals[None,:]
     E = sctJ.eigvals[:,None]-sctI.eigvals[None,:]
     return Gf2(E, v_FJ, v_JI), dE
@@ -112,8 +112,8 @@ def project_sub(A, lead_extract, lead_inject, ispin_i, ispin_j, nupI, ndwI, espa
     pos_cdg = np.where(A[lead_extract]>1e-18)[0]
     for pos_j in pos_c:
         v_JI += A2[lead_inject,pos_j] * sgnI * proj_ispin_j(pos_j, c, not_empty, sctI, sctJ)
-        for pos_i in pos_cdg:
-            v_FJ += A2[lead_extract,pos_i] * sgnJ * proj_ispin_i(pos_i, cdg, not_full, sctJ, sctF)
+    for pos_i in pos_cdg:
+        v_FJ += A2[lead_extract,pos_i] * sgnJ * proj_ispin_i(pos_i, cdg, not_full, sctJ, sctF)
     dE = sctF.eigvals[:,None]-sctI.eigvals[None,:]
     E = -sctJ.eigvals[:,None]+sctI.eigvals[None,:]
     return Gf2(E, v_FJ, v_JI), dE
