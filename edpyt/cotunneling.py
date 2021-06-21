@@ -54,8 +54,6 @@ def project_add(A, lead_extract, lead_inject, ispin_i, ispin_j, nupI, ndwI, espa
     sctF = espace[(nupF, ndwF)] # |n>
     proj_ispin_j = projector(ispin_j) 
     proj_ispin_i = projector(ispin_i) 
-    v_JI = np.zeros((sctJ.eigvals.size,sctI.eigvals.size))
-    v_FJ = np.zeros((sctF.eigvals.size,sctJ.eigvals.size))
     # Because one assumes that only the charge is a conserved quantity
     # (and not Sz), the states are product of up and down comonponents: 
     # 
@@ -73,10 +71,12 @@ def project_add(A, lead_extract, lead_inject, ispin_i, ispin_j, nupI, ndwI, espa
     A2 = A**2
     pos_cdg = np.where(A[lead_extract]>1e-18)[0]
     pos_c = np.where(A[lead_inject]>1e-18)[0]
-    for pos_j in pos_cdg:
-        v_JI += A2[lead_extract,pos_j] * sgnI * proj_ispin_j(pos_j, cdg, not_full, sctI, sctJ)
-    for pos_i in pos_c:
-        v_FJ += A2[lead_inject,pos_i] * sgnJ * proj_ispin_i(pos_i, c, not_empty, sctJ, sctF)
+    v_JI = np.empty((sctJ.eigvals.size,sctI.eigvals.size,pos_cdg.size))
+    v_FJ = np.empty((sctF.eigvals.size,sctJ.eigvals.size,pos_c.size))
+    for j, pos_j in enumerate(pos_cdg):
+        v_JI[...,j] = A2[lead_extract,pos_j] * sgnI * proj_ispin_j(pos_j, cdg, not_full, sctI, sctJ)
+    for i, pos_i in enumerate(pos_c):
+        v_FJ[...,i] = A2[lead_inject,pos_i] * sgnJ * proj_ispin_i(pos_i, c, not_empty, sctJ, sctF)
     dE = sctF.eigvals[:,None]-sctI.eigvals[None,:]
     E = sctJ.eigvals[:,None]-sctI.eigvals[None,:]
     return Gf2(E, v_FJ, v_JI), dE
@@ -102,18 +102,18 @@ def project_sub(A, lead_extract, lead_inject, ispin_i, ispin_j, nupI, ndwI, espa
     sctF = espace[(nupF, ndwF)] # |n>
     proj_ispin_j = projector(ispin_j) 
     proj_ispin_i = projector(ispin_i) 
-    v_JI = np.zeros((sctJ.eigvals.size,sctI.eigvals.size))
-    v_FJ = np.zeros((sctF.eigvals.size,sctJ.eigvals.size))
     # See notes for add projection.
     sgnI = (-1.)**ndwI if ispin_j==0 else 1.
     sgnJ = (-1.)**ndwJ if ispin_i==0 else 1.
     A2 = A**2
     pos_c = np.where(A[lead_inject]>1e-18)[0]
     pos_cdg = np.where(A[lead_extract]>1e-18)[0]
-    for pos_j in pos_c:
-        v_JI += A2[lead_inject,pos_j] * sgnI * proj_ispin_j(pos_j, c, not_empty, sctI, sctJ)
-    for pos_i in pos_cdg:
-        v_FJ += A2[lead_extract,pos_i] * sgnJ * proj_ispin_i(pos_i, cdg, not_full, sctJ, sctF)
+    v_JI = np.empty((sctJ.eigvals.size,sctI.eigvals.size,pos_c.size))
+    v_FJ = np.empty((sctF.eigvals.size,sctJ.eigvals.size,pos_cdg.size))
+    for j, pos_j in enumerate(pos_c):
+        v_JI[...,j] = A2[lead_inject,pos_j] * sgnI * proj_ispin_j(pos_j, c, not_empty, sctI, sctJ)
+    for i, pos_i in enumerate(pos_cdg):
+        v_FJ[...,i] = A2[lead_extract,pos_i] * sgnJ * proj_ispin_i(pos_i, cdg, not_full, sctJ, sctF)
     dE = sctF.eigvals[:,None]-sctI.eigvals[None,:]
     E = -sctJ.eigvals[:,None]+sctI.eigvals[None,:]
     return Gf2(E, v_FJ, v_JI), dE
@@ -275,21 +275,25 @@ def J(Sigma, dE, P, beta, mu):
         gf2h = sigma.Gf2h
         if (gf2e is not None) and (gf2h is not None):
             for f, i in np.ndindex(de.shape):
-                res += Gamma2(gf2e.v_FJ[f,0]*gf2e.v_JI[0,i], #A
-                       gf2h.v_FJ[f,0]*gf2h.v_JI[0,i], #B
+                A = np.sum(gf2e.v_FJ[f,0,:,None]*gf2e.v_JI[0,i,None,:],axis=(-2,-1))
+                B = np.sum(gf2h.v_FJ[f,0,:,None]*gf2h.v_JI[0,i,None,:],axis=(-2,-1))
+                res += Gamma2(A, #A
+                       B, #B
                        gf2e.E[0,i], #epsA
                        gf2h.E[0,i], #epsB
                        [mu[0]-de[f,i],mu[1]], 
                        beta) * P[i]
         elif gf2e is not None:
             for f, i in np.ndindex(de.shape):
-                res += Gamma1(gf2e.v_FJ[f,0]*gf2e.v_JI[0,i], #A
+                A = np.sum(gf2e.v_FJ[f,0,:,None]*gf2e.v_JI[0,i,None,:],axis=(-2,-1))
+                res += Gamma1(A, #A
                        gf2e.E[0,i], #epsA
                        [mu[0]-de[f,i],mu[1]], 
                        beta) * P[i]
         else:
             for f, i in np.ndindex(de.shape):
-                res += Gamma1(gf2h.v_FJ[f,0]*gf2h.v_JI[0,i], #B
+                B = np.sum(gf2h.v_FJ[f,0,:,None]*gf2h.v_JI[0,i,None,:],axis=(-2,-1))
+                res += Gamma1(B, #B
                        gf2h.E[0,i], #epsB
                        [mu[0]-de[f,i],mu[1]], 
                        beta) * P[i]
