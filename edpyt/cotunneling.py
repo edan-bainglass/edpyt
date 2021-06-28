@@ -1,11 +1,12 @@
+from numpy.lib.function_base import delete
+from edpyt.integrals import Gamma1, Gamma2
 from numba import vectorize
 import numpy as np
-from itertools import chain
-
-# from edpyt.lookup import binsearch
+from itertools import zip_longest
+from collections import defaultdict
 
 from edpyt.sector import (
-    get_c_sector, get_cdg_sector)
+    OutOfHilbertError, get_c_sector, get_cdg_sector)
 
 from edpyt.gf_exact import (
     # <N+1|c+(i,up)|N>
@@ -19,9 +20,6 @@ from edpyt.operators import (
     check_empty as not_empty, 
     check_full as not_full,
     cdg, c)
-
-from edpyt.integrate_gf import integrate_gf
-
 
 @vectorize('float64(float64, float64)')
 def abs2(r, i):
@@ -78,8 +76,11 @@ def project_add(A, lead_extract, lead_inject, ispin_i, ispin_j, nupI, ndwI, espa
     for i, pos_i in enumerate(pos_c):
         v_FJ[...,i] = A2[lead_inject,pos_i] * sgnJ * proj_ispin_i(pos_i, c, not_empty, sctJ, sctF)
     dE = sctF.eigvals[:,None]-sctI.eigvals[None,:]
-    E = sctJ.eigvals[:,None]-sctI.eigvals[None,:]
-    return Gf2(E, v_FJ, v_JI), dE
+    E = sctJ.eigvals[None,:]-sctI.eigvals[:,None]
+    gf2elist = []
+    for f,i in np.ndindex(v_FJ.shape[0],v_JI.shape[1]):
+        gf2elist.append(Gf2((nupF,ndwF,f),(nupI,ndwI,i),v_FJ[f],v_JI[:,i].copy(),E[i],dE[f,i]))
+    return gf2elist
 
 
 def project_sub(A, lead_extract, lead_inject, ispin_i, ispin_j, nupI, ndwI, espace):
@@ -115,11 +116,14 @@ def project_sub(A, lead_extract, lead_inject, ispin_i, ispin_j, nupI, ndwI, espa
     for i, pos_i in enumerate(pos_cdg):
         v_FJ[...,i] = A2[lead_extract,pos_i] * sgnJ * proj_ispin_i(pos_i, cdg, not_full, sctJ, sctF)
     dE = sctF.eigvals[:,None]-sctI.eigvals[None,:]
-    E = -sctJ.eigvals[:,None]+sctI.eigvals[None,:]
-    return Gf2(E, v_FJ, v_JI), dE
+    E = -sctJ.eigvals[None,:]+sctI.eigvals[:,None]
+    gf2hlist = []
+    for f,i in np.ndindex(v_FJ.shape[0],v_JI.shape[1]):
+        gf2hlist.append(Gf2((nupF,ndwF,f),(nupI,ndwI,i),v_FJ[f],v_JI[:,i].copy(),E[i],dE[f,i]))
+    return gf2hlist
 
 
-def project(A, lead_extract, lead_inject, nupI, ndwI, espace):
+def project_sector(A, lead_extract, lead_inject, nupI, ndwI, espace, ispin=None):
     """Cotunneling rate from state n to state n'.
 
     NOTE: The leads' and spin's indices are interchanged. For leads' indices
@@ -136,165 +140,205 @@ def project(A, lead_extract, lead_inject, nupI, ndwI, espace):
     ---------------------|-----------------
     u,d | u+1,d  u+1,d-1 |  u,d-1  (u+1,d-1)   , same final state   
     """
+    #                                            
+    #                                                      
+    #  __ll'ss'             +            1                       -               1      
+    #  \        (E)  =  (  y   (ss') ----------------     +     y   (s's) ----------------   ) n(E - (E - E)  - u)  (1-  n(E - u))
+    #  /__                  nn'       E -( E   - E  )            nn'      E - (E   - E)               n   n'    L              R     
+    #     nn'                               m+    n'                             n'    m+
+    #                                                                                                                           
     n = A.shape[1]
-    ispin = [(0,0),(0,1),(1,0),(1,1)]
-    _Sigma = dict.fromkeys(ispin)
-    dE = dict.fromkeys(ispin)
+    if ispin is None: 
+        ispin = [(0,0),(0,1),(1,0),(1,1)]
+    sigmalist = [] #dict.fromkeys(ispin)
     for ispin_i, ispin_j in ispin:
         # Electron and hole green functions.
         try:
-            Gf2e, dEe = project_add(A, lead_extract, lead_inject, ispin_i, ispin_j, nupI, ndwI, espace)
-        except ValueError: # Out of Hilbert
-            Gf2e, dEe = None, None
+            gf2elist = project_add(A, lead_extract, lead_inject, ispin_i, ispin_j, nupI, ndwI, espace)
+        except OutOfHilbertError:
+            gf2elist = (None,)
         try:
-            Gf2h, dEh = project_sub(A, lead_extract, lead_inject, ispin_j, ispin_i, nupI, ndwI, espace)
-        except ValueError: # Out of Hilbert
-            Gf2h, dEh = None, None
-        if (dEe is not None) and (dEh is not None):
-            assert np.allclose(dEe, dEh), """
-                Invalid projections. Initial and final states 
-                after N+1 and N-1 projections are not the same."""
-        dE[ispin_i, ispin_j] = dEh if dEe is None else dEe
-        _Sigma[ispin_i, ispin_j] = Sigma(Gf2e, Gf2h)
-    if (dE[(0,0)] is not None) and (dE[(1,1)] is not None):
-        assert np.allclose(dE[(0,0)], dE[(1,1)]), """
-            Invalid projections. Initial and final states 
-            for (0,0) and (1,1) spin projections are not the same."""
-    return _Sigma, dE
+            gf2hlist = project_sub(A, lead_extract, lead_inject, ispin_j, ispin_i, nupI, ndwI, espace)
+        except OutOfHilbertError:
+            gf2hlist = (None,)
+        sigmalist.extend([Sigma(gf2e,gf2h)
+                          for gf2e,gf2h in zip_longest(gf2elist,gf2hlist)])
+    return {(sigma.idF,sigma.idI):sigma for sigma in sigmalist}
+
+
+def build_transition_elements(A, lead_extract, lead_inject, egs, espace):
+    """Build projector space. Compute all possible matrix elements connecting 
+    the ground state and the vectors reached by the latter (including the matrix
+    elements connecting the latter vectors).
+    """
+    # pspace = defaultdict(lambda : np.ndarray((2,2),dtype=object))
+    ispin = [(0,0),(0,1),(1,0),(1,1)]
+    dS = [(0,0),   # add up remove up
+          (-1,1),  # add dw remove up
+          (1,-1),  # remove dw add up
+          (0,0)]   # add dw remove dw
+    ngs = [ns for ns,sct in espace.items() if abs(sct.eigvals.min()-egs)<1e-9]
+    reached_by_gs = [(ns[0]+ds[0],ns[1]+ds[1]) for ns in ngs for ds in dS]
+    # Loop over the sectors reached by the GS sector and compute the
+    # projections to sectors that are also reached by the GS. Note that
+    # this ensures that the (self) matrix elements bringing to the same sector
+    # are also included.
+    sigmadict = {}
+    for ns in np.unique(reached_by_gs,axis=0):
+        _ispin = [i for i,ds in zip(ispin,dS) if (ns[0]+ds[0],ns[1]+ds[1]) in reached_by_gs]
+        _args = ns[0], ns[1], espace, _ispin
+        sigmadict.update(
+            project_sector(A, lead_extract, lead_inject, *_args))
+    return sigmadict
 
 
 class Gf2:
-
-    def __init__(self, E, v_FJ, v_JI) -> None:
+    """Green's function.
+    
+    Args:
+        E : (E+ - En') or (En' - E-)
+        v_FJ : <n|c+|m-> or <n|c|m+>
+        v_JI : <m-|c|n'> or <m+|c+|n'>
+        dE = En-En'
+        dS = change in spin.
+    """
+                           
+    #    +(-)              1           
+    #  y          ---------------- 
+    #    nn'       E -( E   - E  )
+    #                    m+    n' 
+    def __init__(self, idF, idI, vF, vI, E, dE) -> None:
+        self.idF = idF
+        self.idI = idI
+        self.vF = vF
+        self.vI = vI
         self.E = E
-        self.v_FJ = v_FJ
-        self.v_JI = v_JI
-
-    @property
-    def shape(self):
-        return (self.v_FJ.shape[0],self.E.shape[0],self.v_JI.shape[1])
-
+        self.dE = dE
+        self.dS = (idF[0]-idI[0],idF[1]-idI[1])
+        
     def __call__(self, z):
         z = np.atleast_1d(z)
-        if z.ndim == 1:
-            z = z[:,None,None]
-            res = np.einsum('ij,kjl,jl->kil',
-                self.v_FJ,
-                np.reciprocal(z-self.E[None,...]),
-                self.v_JI
-            )
-        elif z.ndim == 2:
-            z = z[None,...]
-            res = np.einsum('ij,jil,jl->il',
-                self.v_FJ,
-                np.reciprocal(z-self.E[:,None,:]),
-                self.v_JI
-            )
+        res = np.einsum('j,j,kj->k',self.vF.sum(-1),self.vI.sum(-1),
+                        np.reciprocal(z-self.E[None,:]))
         return res
 
 
 class Sigma:
+    #   |                   |  2
+    #   | G  (z) + G    (z) |      
+    #   |  e         h      |  
+    def __init__(self, gf2e, gf2h) -> None:
+        if (gf2e is not None) and (gf2h is not None):
+            assert np.allclose(gf2e.idF, gf2h.idF)&np.allclose(gf2e.idI, gf2h.idI), """
+                Invalid projections. Initial and final states 
+                after N+1 and N-1 projections are not the same."""
+        self.gf2e = gf2e
+        self.gf2h = gf2h
+        self.gf2 = self.gf2e or self.gf2h
+        self.mu = None        
+        
+        if (gf2e is not None) and (gf2h is not None):
+            self._call = lambda z :  self.gf2e(z) + self.gf2h(z)
+            self._integrate = lambda beta, mu : Gamma2(
+                self.gf2e.vF[0].sum()*self.gf2e.vI[0].sum(), #A
+                self.gf2h.vF[0].sum()*self.gf2h.vI[0].sum(), #B
+                self.gf2e.E[0], # epsA
+                self.gf2h.E[0], # epsB
+                [mu[0]-self.dE,mu[1]], beta)
+        else:
+            self._call = lambda z :  self.gf2(z)
+            self._integrate = lambda beta, mu : Gamma1(
+                self.gf2.vF[0].sum()*self.gf2.vI[0].sum(), # A
+                self.gf2.E[0], # epsA
+                [mu[0]-self.dE,mu[1]], beta)
+            
+        self._approximate = lambda beta, mu : self.G(beta, self.dE-mu[0]+mu[1]) * self(0.5*(self.dE+sum(mu)))
 
-    def __init__(self, Gf2e, Gf2h) -> None:
-        self.Gf2e = Gf2e
-        self.Gf2h = Gf2h
+    @staticmethod
+    def G(beta, z):
+        if (beta*abs(z))<1e-18:
+            return 1.
+        if (beta*z)>1e3:
+            return 0.
+        return z/(np.exp(beta*z)-1)
+
+    def __getattr__(self, name):
+        """Default is to return attribute of gf2e."""
+        if name in ['idF','idI','dS','dE']:
+            return getattr(self.gf2, name)
+        raise AttributeError
+    
+    def integrate(self, beta, mu, approximate=False):
+        #                   __  
+        #   _ ll'ss'       |       __ll'ss'    
+        #  |          =    |   dE  \        (E)
+        #    nn'         __|       /__
+        #                              nn'
+        #             
+        mu = tuple(mu)    
+        if self.mu!=mu:
+            self.gamma = self._approximate(beta, mu) if approximate else self._integrate(beta, mu)
+            self.mu = mu
+        return self.gamma
 
     def __call__(self, z):
-        res = self.Gf2e(z) + self.Gf2h(z)
+        res = self._call(z)
         return abs2(res.real, res.imag)
 
 
-# https://www.weizmann.ac.il/condmat/oreg/sites/condmat.oreg/files/uploads/Thesises/carmiphd.pdf
+def build_rate_matrix(sigmadict, beta, mu, approximate=False):
+    #          ___
+    #         |     __                      
+    #         |    \     _             _   
+    #         |  -      |             |            --  
+    #         |    /__     k1           12
+    #         |        k!=1           __         
+    #  W  =   |        _             \     _       --  
+    #         |       |            -      |          
+    #         |         21           /__     k2  
+    #         |                          k!=2
+    #         |       :                :          \
+    sz, odd = np.divmod(len(sigmadict), 2)
+    assert ~odd, """
+        Invalid sigma list. Each matrix element must contain 
+        its complex conjugate.
+    """
+    idF = set([idF for idF, _ in sigmadict.keys()])
+    map = {i:id for i,id in enumerate(idF)}
+    sz = len(idF)
+    W = np.zeros((sz, sz))
+    for i, f in np.ndindex(sz, sz):
+        if i != f:
+            try:
+                gamma = sigmadict[map[f],map[i]].integrate(beta, mu, approximate)
+            except:
+                continue
+            W[i,i] -= gamma
+            W[f,i] += gamma
+    return W
 
 
-from mpmath import psi
-from scipy.constants import hbar as _hbar, eV
-hbar = _hbar/eV # Units of electron volt.
-
-# Helpers
-
-def _Psi(n, a, b, beta):
-    """Polygamma function of order n."""
-    return psi(n, 0.5 + (1.j*beta)/(2.*np.pi)*(a-b))
-
-def _nB(eps, beta):
-    """Bose distribution."""
-    return 1./(np.exp(beta*eps)-1)
-
-from warnings import warn
-
-def _I1(C, eps, mu, beta):
-    f = C**2 * beta/(2*np.pi) * np.imag(
-        _Psi(1,mu[1],eps,beta) 
-      - _Psi(1,mu[0],eps,beta)
-    )
-    with np.errstate(divide='raise',over='ignore'): # 1/0.
+def build_transition_matrix(sigmadict, beta, mu, approximate=False):
+    sz, odd = np.divmod(len(sigmadict), 2)
+    assert ~odd, """
+        Invalid sigma list. Each matrix element must contain 
+        its complex conjugate.
+    """
+    idF = set([idF for idF, _ in sigmadict.keys()])
+    map = {i:id for i,id in enumerate(idF)}
+    sz = len(idF)
+    T = np.empty((sz, sz))
+    for i, f in np.ndindex(sz, sz):
         try:
-            w = _nB(mu[1]-mu[0],beta)
-        except FloatingPointError as e:
-            if abs(f)<1e-18: # 0./0. -> 1.
-                return 1.
-            else:
-                raise e
-    return w * f
-
-def _I2(A, B, epsA, epsB, mu, beta):
-    f = A*B * np.real(
-        _Psi(0,epsA,mu[1],beta) 
-      - _Psi(0,epsA,mu[0],beta) 
-      - _Psi(0,epsB,mu[1],beta)
-      + _Psi(0,epsB,mu[0],beta)
-    )
-    with np.errstate(divide='raise',over='ignore'): # 1./0.
-        try:
-            w = _nB(mu[1]-mu[0],beta)
-            dAB_inv = 1. / (epsA - epsB)
-        except FloatingPointError as e:
-            if abs(f)<1e-18: # 0./0.
-                return 1.
-            else:
-                raise e
-    return w * dAB_inv * f
-
-#
-
-Gamma1 = _I1
+            gamma = sigmadict[map[f],map[i]].integrate(beta, mu, approximate)
+        except:
+            continue
+        T[i,f] = gamma
+    return T
 
 
-def Gamma2(A, B, epsA, epsB, mu, beta):
-    return _I1(A,epsA,mu,beta) \
-         + _I1(B,epsB,mu,beta) \
-         + _I2(A,B,epsA,epsB,mu,beta)
-
-
-def J(Sigma, dE, P, beta, mu):
-    """Density current."""
-    res = 0.
-    for sigma, de in zip(Sigma.values(), dE.values()):
-        gf2e = sigma.Gf2e
-        gf2h = sigma.Gf2h
-        if (gf2e is not None) and (gf2h is not None):
-            for f, i in np.ndindex(de.shape):
-                A = np.sum(gf2e.v_FJ[f,0,:,None]*gf2e.v_JI[0,i,None,:],axis=(-2,-1))
-                B = np.sum(gf2h.v_FJ[f,0,:,None]*gf2h.v_JI[0,i,None,:],axis=(-2,-1))
-                res += Gamma2(A, #A
-                       B, #B
-                       gf2e.E[0,i], #epsA
-                       gf2h.E[0,i], #epsB
-                       [mu[0]-de[f,i],mu[1]], 
-                       beta) * P[i]
-        elif gf2e is not None:
-            for f, i in np.ndindex(de.shape):
-                A = np.sum(gf2e.v_FJ[f,0,:,None]*gf2e.v_JI[0,i,None,:],axis=(-2,-1))
-                res += Gamma1(A, #A
-                       gf2e.E[0,i], #epsA
-                       [mu[0]-de[f,i],mu[1]], 
-                       beta) * P[i]
-        else:
-            for f, i in np.ndindex(de.shape):
-                B = np.sum(gf2h.v_FJ[f,0,:,None]*gf2h.v_JI[0,i,None,:],axis=(-2,-1))
-                res += Gamma1(B, #B
-                       gf2h.E[0,i], #epsB
-                       [mu[0]-de[f,i],mu[1]], 
-                       beta) * P[i]
-    return res
+def screen_transition_elements(sigmadict, egs, espace, cutoff):
+    return {(idF, idI):sigma for (idF, idI),sigma in sigmadict.items() 
+            if (abs(sigma.dE)<cutoff)
+            and(abs(espace[idF[:2]].eigvals[idF[2]]-egs)<cutoff)
+            and(abs(espace[idI[:2]].eigvals[idI[2]]-egs)<cutoff)}
