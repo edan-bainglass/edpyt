@@ -123,7 +123,7 @@ def project_sub(A, lead_extract, lead_inject, ispin_i, ispin_j, nupI, ndwI, espa
     return gf2hlist
 
 
-def project_sector(A, lead_extract, lead_inject, nupI, ndwI, espace, ispin=None):
+def project_sector(A, lead_extract, lead_inject, nupI, ndwI, espace, sigmadict, ispin=None):
     """Cotunneling rate from state n to state n'.
 
     NOTE: The leads' and spin's indices are interchanged. For leads' indices
@@ -163,7 +163,11 @@ def project_sector(A, lead_extract, lead_inject, nupI, ndwI, espace, ispin=None)
             gf2hlist = (None,)
         sigmalist.extend([Sigma(gf2e,gf2h)
                           for gf2e,gf2h in zip_longest(gf2elist,gf2hlist)])
-    return {(sigma.idF,sigma.idI):sigma for sigma in sigmalist}
+    for sigma in sigmalist:
+        sigmadict[(sigma.idF,sigma.idI)].append(sigma)
+    return sigmadict
+    # {(sigma.idF,sigma.idI):sigma for sigma in sigmalist}
+    # return {(sigma.idF,sigma.idI):sigma for sigma in sigmalist}
 
 
 def build_transition_elements(A, lead_extract, lead_inject, egs, espace):
@@ -183,12 +187,12 @@ def build_transition_elements(A, lead_extract, lead_inject, egs, espace):
     # projections to sectors that are also reached by the GS. Note that
     # this ensures that the (self) matrix elements bringing to the same sector
     # are also included.
-    sigmadict = {}
+    sigmadict = defaultdict(list)
     for ns in np.unique(reached_by_gs,axis=0):
         _ispin = [i for i,ds in zip(ispin,dS) if (ns[0]+ds[0],ns[1]+ds[1]) in reached_by_gs]
-        _args = ns[0], ns[1], espace, _ispin
-        sigmadict.update(
-            project_sector(A, lead_extract, lead_inject, *_args))
+        _args = ns[0], ns[1], espace, sigmadict, _ispin
+        # sigmadict.update(
+        project_sector(A, lead_extract, lead_inject, *_args)
     return sigmadict
 
 
@@ -310,7 +314,9 @@ def build_rate_matrix(sigmadict, beta, mu, approximate=False):
     for i, f in np.ndindex(sz, sz):
         if i != f:
             try:
-                gamma = sigmadict[map[f],map[i]].integrate(beta, mu, approximate)
+                gamma = 0.
+                for sigma in sigmadict[map[f],map[i]]:
+                    gamma += sigma.integrate(beta, mu, approximate)
             except:
                 continue
             W[i,i] -= gamma
@@ -330,7 +336,9 @@ def build_transition_matrix(sigmadict, beta, mu, approximate=False):
     T = np.empty((sz, sz))
     for i, f in np.ndindex(sz, sz):
         try:
-            gamma = sigmadict[map[f],map[i]].integrate(beta, mu, approximate)
+            gamma = 0.
+            for sigma in sigmadict[map[f],map[i]]:
+                gamma += sigma.integrate(beta, mu, approximate)
         except:
             continue
         T[i,f] = gamma
@@ -339,6 +347,6 @@ def build_transition_matrix(sigmadict, beta, mu, approximate=False):
 
 def screen_transition_elements(sigmadict, egs, espace, cutoff):
     return {(idF, idI):sigma for (idF, idI),sigma in sigmadict.items() 
-            if (abs(sigma.dE)<cutoff)
+            if (abs(sigma[0].dE)<cutoff)
             and(abs(espace[idF[:2]].eigvals[idF[2]]-egs)<cutoff)
             and(abs(espace[idI[:2]].eigvals[idI[2]]-egs)<cutoff)}
