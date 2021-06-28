@@ -10,7 +10,7 @@ from edpyt.operators import check_empty as not_empty
 from edpyt.operators import check_full as not_full
 from edpyt.tridiag import eigh_tridiagonal
 from edpyt._continued_fraction import continued_fraction as _cfpyx
-from edpyt.sector import get_cdg_sector, get_c_sector
+from edpyt.sector import OutOfHilbertError, get_cdg_sector, get_c_sector
 from edpyt.gf_exact import project_exact_up, project_exact_dw
 
 
@@ -180,7 +180,7 @@ def build_gf_lanczos(H, V, espace, beta, egs=0., pos=0, repr='cf', ispin=0, sepa
         exponents = np.exp(-beta*(sctI.eigvals-egs))
         try: # Add spin (N+1 sector)
             nupJ, ndwJ = get_cdg_sector(n, nupI, ndwI, ispin)
-        except ValueError: # More spin than spin states
+        except OutOfHilbertError: # More spin than spin states
             pass
         else:
             # Arrival sector
@@ -215,7 +215,7 @@ def build_gf_lanczos(H, V, espace, beta, egs=0., pos=0, repr='cf', ispin=0, sepa
                     )
         try: # Remove spin (N-1 sector)
             nupJ, ndwJ = get_c_sector(nupI, ndwI, ispin)
-        except ValueError: # Negative spin
+        except OutOfHilbertError: # Negative spin
             pass
         else:
             # Arrival sector

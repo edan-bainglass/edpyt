@@ -1,3 +1,4 @@
+from typing import ValuesView
 import numpy as np
 from numba import njit
 
@@ -8,6 +9,10 @@ from scipy.special import binom
 from edpyt.shared import (
     unsiged_dt
 )
+
+
+class OutOfHilbertError(ValueError):
+    pass
 
 
 @njit('void(uint32[:])')
@@ -52,14 +57,14 @@ def get_cdg_sector(n, nup, ndw, ispin):
         ndwJ = ndw
         # Cannot have more spin than spin states
         if nupJ>n:
-            raise ValueError(f"Out of hilbert.")
+            raise OutOfHilbertError(f"Out of hilbert.")
     # Add down electron
     elif ispin==1:
         nupJ = nup
         ndwJ = ndw+1
         # Cannot have more spin than spin states
         if ndwJ>n:
-            raise ValueError(f"Out of hilbert.")
+            raise OutOfHilbertError(f"Out of hilbert.")
     else:
         raise RuntimeError(f"Invalid spin index {ispin}. Use 0 for up and 1 for down")
     return nupJ, ndwJ
@@ -72,13 +77,13 @@ def get_c_sector(nup, ndw, ispin):
         nupJ = nup-1
         ndwJ = ndw
         if nupJ<0:
-            raise ValueError(f"Out of hilbert.")
+            raise OutOfHilbertError(f"Out of hilbert.")
     # Remove down electron
     elif ispin==1:
         nupJ = nup
         ndwJ = ndw-1
         if ndwJ<0:
-            raise ValueError(f"Out of hilbert.")
+            raise OutOfHilbertError(f"Out of hilbert.")
     else:
         raise RuntimeError(f"Invalid spin index {ispin}. Use 0 for up and 1 for down")
     return nupJ, ndwJ
