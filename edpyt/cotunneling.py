@@ -372,3 +372,21 @@ def screen_transition_elements(sigmadict, egs, espace, cutoff):
             if (abs(sigma[0].dE)<cutoff)
             and(abs(espace[idF[:2]].eigvals[idF[2]]-egs)<cutoff)
             and(abs(espace[idI[:2]].eigvals[idI[2]]-egs)<cutoff)}
+
+
+def find_active_sectors(ngs):
+    """Find all sectors that are necessary to diagonalize in order
+    to build the cotunniling transition and rate matrices.
+    Args:
+        ngs : (list of tuples)
+            list of tuples with the ground state sectors,
+            e.g. [(nup,ndw),(nup,ndw),....]
+    """
+    dS = [(0,0),(-1,1),(1,-1)]
+    dN = [(0,1),(0,-1),(1,0),(-1,0)]
+    reached_by_gs = [(ns[0]+ds[0],ns[1]+ds[1]) for ns in ngs for ds in dS]
+    active_sectors = [ns for ns in reached_by_gs]
+    for ns in np.unique(reached_by_gs,axis=0):
+        active_sectors.extend([(ns[0]+dn[0],ns[1]+dn[1]) for ds in dS for dn in dN 
+                               if (ns[0]+ds[0],ns[1]+ds[1]) in reached_by_gs])
+    return [tuple(ns) for ns in set(active_sectors)]
