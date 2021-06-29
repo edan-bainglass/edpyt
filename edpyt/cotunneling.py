@@ -1,9 +1,10 @@
-from numpy.lib.function_base import delete
-from edpyt.integrals import Gamma1, Gamma2
 from numba import vectorize
 import numpy as np
 from itertools import zip_longest
 from collections import defaultdict
+from operator import attrgetter
+
+from edpyt.integrals import Gamma1, Gamma2
 
 from edpyt.sector import (
     OutOfHilbertError, get_c_sector, get_cdg_sector)
@@ -32,7 +33,7 @@ def projector(ispin):
     return project_exact_dw
 
 
-def project_add(A, lead_extract, lead_inject, ispin_i, ispin_j, nupI, ndwI, espace):
+def project_add(ispin_i, ispin_j, n, nupI, ndwI, espace):
     """Cotunneling rate for a lead electron to go from lead l' to lead l and
     the central region to go from state n' to state n, i.e.:
      
@@ -44,7 +45,6 @@ def project_add(A, lead_extract, lead_inject, ispin_i, ispin_j, nupI, ndwI, espa
     #  y (ss') =        A     A       < n| c    | m+ > < m+| c      | n' >
     #   nn'      /__     l,i    l',i'        i,s               i',s'
     #            ii'                            
-    n = A.shape[1]
     nupJ, ndwJ = get_cdg_sector(n, nupI, ndwI, ispin_j) # |m+>
     nupF, ndwF = get_c_sector(nupJ, ndwJ, ispin_i) # |n>
     sctI = espace[(nupI, ndwI)] # |n'>
@@ -66,15 +66,12 @@ def project_add(A, lead_extract, lead_inject, ispin_i, ispin_j, nupI, ndwI, espa
     # of down spins when the operator acts on the up component.
     sgnI = (-1.)**ndwI if ispin_j==0 else 1. 
     sgnJ = (-1.)**ndwJ if ispin_i==0 else 1.
-    A2 = A**2
-    pos_cdg = np.where(A[lead_extract]>1e-18)[0]
-    pos_c = np.where(A[lead_inject]>1e-18)[0]
-    v_JI = np.empty((sctJ.eigvals.size,sctI.eigvals.size,pos_cdg.size))
-    v_FJ = np.empty((sctF.eigvals.size,sctJ.eigvals.size,pos_c.size))
-    for j, pos_j in enumerate(pos_cdg):
-        v_JI[...,j] = A2[lead_extract,pos_j] * sgnI * proj_ispin_j(pos_j, cdg, not_full, sctI, sctJ)
-    for i, pos_i in enumerate(pos_c):
-        v_FJ[...,i] = A2[lead_inject,pos_i] * sgnJ * proj_ispin_i(pos_i, c, not_empty, sctJ, sctF)
+    v_JI = np.empty((sctJ.eigvals.size,sctI.eigvals.size,n))
+    v_FJ = np.empty((sctF.eigvals.size,sctJ.eigvals.size,n))
+    for j in range(n):
+        v_JI[...,j] = sgnI * proj_ispin_j(j, cdg, not_full, sctI, sctJ)
+    for i in range(n):
+        v_FJ[...,i] = sgnJ * proj_ispin_i(i, c, not_empty, sctJ, sctF)
     dE = sctF.eigvals[:,None]-sctI.eigvals[None,:]
     E = sctJ.eigvals[None,:]-sctI.eigvals[:,None]
     gf2elist = []
@@ -83,7 +80,7 @@ def project_add(A, lead_extract, lead_inject, ispin_i, ispin_j, nupI, ndwI, espa
     return gf2elist
 
 
-def project_sub(A, lead_extract, lead_inject, ispin_i, ispin_j, nupI, ndwI, espace):
+def project_sub(ispin_i, ispin_j, n, nupI, ndwI, espace):
     """Cotunneling rate for a lead electron to go from lead l to lead l' and
     the central region to go from state n' to state n, i.e.:
     
@@ -95,7 +92,6 @@ def project_sub(A, lead_extract, lead_inject, ispin_i, ispin_j, nupI, ndwI, espa
     #  y (ss') =        A     A       < n| c    | m- > < m-| c      | n' >
     #   nn'      /__     l',i    l,i'        i,s               i',s'
     #            ii'                           
-    n = A.shape[1]
     nupJ, ndwJ = get_c_sector(nupI, ndwI, ispin_j) # |m+>
     nupF, ndwF = get_cdg_sector(n, nupJ, ndwJ, ispin_i) # |n>
     sctI = espace[(nupI, ndwI)] # |n'>
@@ -106,15 +102,12 @@ def project_sub(A, lead_extract, lead_inject, ispin_i, ispin_j, nupI, ndwI, espa
     # See notes for add projection.
     sgnI = (-1.)**ndwI if ispin_j==0 else 1.
     sgnJ = (-1.)**ndwJ if ispin_i==0 else 1.
-    A2 = A**2
-    pos_c = np.where(A[lead_inject]>1e-18)[0]
-    pos_cdg = np.where(A[lead_extract]>1e-18)[0]
-    v_JI = np.empty((sctJ.eigvals.size,sctI.eigvals.size,pos_c.size))
-    v_FJ = np.empty((sctF.eigvals.size,sctJ.eigvals.size,pos_cdg.size))
-    for j, pos_j in enumerate(pos_c):
-        v_JI[...,j] = A2[lead_inject,pos_j] * sgnI * proj_ispin_j(pos_j, c, not_empty, sctI, sctJ)
-    for i, pos_i in enumerate(pos_cdg):
-        v_FJ[...,i] = A2[lead_extract,pos_i] * sgnJ * proj_ispin_i(pos_i, cdg, not_full, sctJ, sctF)
+    v_JI = np.empty((sctJ.eigvals.size,sctI.eigvals.size,n))
+    v_FJ = np.empty((sctF.eigvals.size,sctJ.eigvals.size,n))
+    for j in range(n):
+        v_JI[...,j] = sgnI * proj_ispin_j(j, c, not_empty, sctI, sctJ)
+    for i in range(n):
+        v_FJ[...,i] = sgnJ * proj_ispin_i(i, cdg, not_full, sctJ, sctF)
     dE = sctF.eigvals[:,None]-sctI.eigvals[None,:]
     E = -sctJ.eigvals[None,:]+sctI.eigvals[:,None]
     gf2hlist = []
@@ -123,7 +116,7 @@ def project_sub(A, lead_extract, lead_inject, ispin_i, ispin_j, nupI, ndwI, espa
     return gf2hlist
 
 
-def project_sector(A, lead_extract, lead_inject, nupI, ndwI, espace, sigmadict, ispin=None):
+def project_sector(n, nupI, ndwI, espace, sigmadict, ispin=None):
     """Cotunneling rate from state n to state n'.
 
     NOTE: The leads' and spin's indices are interchanged. For leads' indices
@@ -147,18 +140,17 @@ def project_sector(A, lead_extract, lead_inject, nupI, ndwI, espace, sigmadict, 
     #  /__                  nn'       E -( E   - E  )            nn'      E - (E   - E)               n   n'    L              R     
     #     nn'                               m+    n'                             n'    m+
     #                                                                                                                           
-    n = A.shape[1]
     if ispin is None: 
         ispin = [(0,0),(0,1),(1,0),(1,1)]
     sigmalist = [] #dict.fromkeys(ispin)
     for ispin_i, ispin_j in ispin:
         # Electron and hole green functions.
         try:
-            gf2elist = project_add(A, lead_extract, lead_inject, ispin_i, ispin_j, nupI, ndwI, espace)
+            gf2elist = project_add(ispin_i, ispin_j, n, nupI, ndwI, espace)
         except OutOfHilbertError:
             gf2elist = (None,)
         try:
-            gf2hlist = project_sub(A, lead_extract, lead_inject, ispin_j, ispin_i, nupI, ndwI, espace)
+            gf2hlist = project_sub(ispin_j, ispin_i, n, nupI, ndwI, espace)
         except OutOfHilbertError:
             gf2hlist = (None,)
         sigmalist.extend([Sigma(gf2e,gf2h)
@@ -166,11 +158,9 @@ def project_sector(A, lead_extract, lead_inject, nupI, ndwI, espace, sigmadict, 
     for sigma in sigmalist:
         sigmadict[(sigma.idF,sigma.idI)].append(sigma)
     return sigmadict
-    # {(sigma.idF,sigma.idI):sigma for sigma in sigmalist}
-    # return {(sigma.idF,sigma.idI):sigma for sigma in sigmalist}
 
 
-def build_transition_elements(A, lead_extract, lead_inject, egs, espace):
+def build_transition_elements(n, egs, espace, cutoff=None):
     """Build projector space. Compute all possible matrix elements connecting 
     the ground state and the vectors reached by the latter (including the matrix
     elements connecting the latter vectors).
@@ -190,9 +180,9 @@ def build_transition_elements(A, lead_extract, lead_inject, egs, espace):
     sigmadict = defaultdict(list)
     for ns in np.unique(reached_by_gs,axis=0):
         _ispin = [i for i,ds in zip(ispin,dS) if (ns[0]+ds[0],ns[1]+ds[1]) in reached_by_gs]
-        _args = ns[0], ns[1], espace, sigmadict, _ispin
-        # sigmadict.update(
-        project_sector(A, lead_extract, lead_inject, *_args)
+        project_sector(n, ns[0], ns[1], espace, sigmadict, _ispin)
+    if cutoff is not None:
+        return screen_transition_elements(sigmadict, egs, espace, cutoff)
     return sigmadict
 
 
@@ -220,77 +210,105 @@ class Gf2:
         self.dE = dE
         self.dS = (idF[0]-idI[0],idF[1]-idI[1])
         
-    def __call__(self, z):
+    def __call__(self, z, aF, aI):
         z = np.atleast_1d(z)
-        res = np.einsum('j,j,kj->k',self.vF.sum(-1),self.vI.sum(-1),
+        res = np.einsum('j,j,kj->k',aF.dot(self.vF.T),aI.dot(self.vI.T),
                         np.reciprocal(z-self.E[None,:]))
         return res
 
 
-class Sigma:
-    #   |                   |  2
-    #   | G  (z) + G    (z) |      
-    #   |  e         h      |  
-    def __init__(self, gf2e, gf2h) -> None:
-        if (gf2e is not None) and (gf2h is not None):
-            assert np.allclose(gf2e.idF, gf2h.idF)&np.allclose(gf2e.idI, gf2h.idI), """
-                Invalid projections. Initial and final states 
-                after N+1 and N-1 projections are not the same."""
-        self.gf2e = gf2e
-        self.gf2h = gf2h
-        self.gf2 = self.gf2e or self.gf2h
-        self.mu = None        
-        
-        if (gf2e is not None) and (gf2h is not None):
-            self._call = lambda z :  self.gf2e(z) + self.gf2h(z)
-            self._integrate = lambda beta, mu : Gamma2(
-                self.gf2e.vF[0].sum()*self.gf2e.vI[0].sum(), #A
-                self.gf2h.vF[0].sum()*self.gf2h.vI[0].sum(), #B
-                self.gf2e.E[0], # epsA
-                self.gf2h.E[0], # epsB
-                [mu[0]-self.dE,mu[1]], beta)
-        else:
-            self._call = lambda z :  self.gf2(z)
-            self._integrate = lambda beta, mu : Gamma1(
-                self.gf2.vF[0].sum()*self.gf2.vI[0].sum(), # A
-                self.gf2.E[0], # epsA
-                [mu[0]-self.dE,mu[1]], beta)
-            
-        self._approximate = lambda beta, mu : self.G(beta, self.dE-mu[0]+mu[1]) * self(0.5*(self.dE+sum(mu)))
+class _Sigma:
+    """Base class for Sigma."""
+    def __init__(self, gf2) -> None:
+        self.gf2 = gf2
+
+    def __getattr__(self, name):
+        if name in ['idF','idI','dS','dE']:
+            return getattr(self.gf2, name)
+        raise AttributeError
 
     @staticmethod
     def G(beta, z):
+        """Helper function for approximate solution."""
         if (beta*abs(z))<1e-18:
             return 1.
         if (beta*z)>1e3:
             return 0.
         return z/(np.exp(beta*z)-1)
 
-    def __getattr__(self, name):
-        """Default is to return attribute of gf2e."""
-        if name in ['idF','idI','dS','dE']:
-            return getattr(self.gf2, name)
-        raise AttributeError
-    
-    def integrate(self, beta, mu, approximate=False):
-        #                   __  
-        #   _ ll'ss'       |       __ll'ss'    
-        #  |          =    |   dE  \        (E)
-        #    nn'         __|       /__
-        #                              nn'
-        #             
-        mu = tuple(mu)    
-        if self.mu!=mu:
-            self.gamma = self._approximate(beta, mu) if approximate else self._integrate(beta, mu)
-            self.mu = mu
-        return self.gamma
+    def approximate(self, A, extract, inject, beta, mu):
+        return self.G(beta, self.dE-mu[extract]+mu[inject]
+               ) * self(0.5*(self.dE+sum(mu)), A, extract, inject)
+              
 
-    def __call__(self, z):
-        res = self._call(z)
+class _Sigmae(_Sigma):
+    """Electron."""
+    #   |        |  2
+    #   | G  (z) |      
+    #   |  e     |    
+    
+    def integrate(self, A, extract, inject, beta, mu):
+        return Gamma1(
+            A[inject].dot(self.gf2.vF[0])*A[extract].dot(self.gf2.vI[0]), # A
+            self.gf2.E[0], # epsA
+            [mu[extract]-self.dE,mu[inject]], beta)
+
+    def __call__(self, z, A, extract, inject):
+        res = self.gf2(z, A[inject], A[extract])
+        return abs2(res.real, res.imag)
+    
+
+class _Sigmah(_Sigma):
+    """Hole."""
+    #   |        |  2
+    #   | G  (z) |      
+    #   |  h     |    
+    
+    def integrate(self, A, extract, inject, beta, mu):
+        return Gamma1(
+            A[extract].dot(self.gf2.vF[0])*A[inject].dot(self.gf2.vI[0]), # A
+            self.gf2.E[0], # epsA
+            [mu[extract]-self.dE,mu[inject]], beta)
+    
+    def __call__(self, z, A, extract, inject):
+        res = self.gf2(z, A[extract], A[inject])
+        return abs2(res.real, res.imag)
+     
+               
+class Sigma(_Sigma):
+    #   |                   |  2
+    #   | G  (z) + G    (z) |      
+    #   |  e         h      |      
+    def __new__(cls, gf2e, gf2h):
+        if gf2h is None:
+            return _Sigmae(gf2e)
+        if gf2e is None:
+            return _Sigmah(gf2h)
+        return super().__new__(cls)
+    
+    def __init__(self, gf2e, gf2h) -> None:
+        assert np.allclose(gf2e.idF, gf2h.idF)&np.allclose(gf2e.idI, gf2h.idI), """
+                Invalid projections. Initial and final states 
+                after N+1 and N-1 projections are not the same."""
+        self.gf2e = gf2e
+        self.gf2h = gf2h
+        # Default of gf2e params
+        super().__init__(self.gf2e)
+    
+    def integrate(self, A, extract, inject, beta, mu):
+        return Gamma2(
+            A[inject].dot(self.gf2e.vF[0])*A[extract].dot(self.gf2e.vI[0]), #A
+            A[extract].dot(self.gf2h.vF[0])*A[inject].dot(self.gf2h.vI[0]), #B
+            self.gf2e.E[0], # epsA
+            self.gf2h.E[0], # epsB
+            [mu[extract]-self.dE,mu[inject]], beta)
+
+    def __call__(self, z, A, extract, inject):
+        res = self.gf2e(z, A[inject], A[extract]) + self.gf2h(z, A[extract], A[inject])
         return abs2(res.real, res.imag)
 
 
-def build_rate_matrix(sigmadict, beta, mu, approximate=False):
+def build_rate_matrix(sigmadict, beta, mu, A, approx_integral=False):
     #          ___
     #         |     __                      
     #         |    \     _             _   
@@ -302,6 +320,7 @@ def build_rate_matrix(sigmadict, beta, mu, approximate=False):
     #         |         21           /__     k2  
     #         |                          k!=2
     #         |       :                :          \
+    integrate = attrgetter('approximate') if approx_integral else attrgetter('integrate')
     sz, odd = np.divmod(len(sigmadict), 2)
     assert ~odd, """
         Invalid sigma list. Each matrix element must contain 
@@ -311,25 +330,27 @@ def build_rate_matrix(sigmadict, beta, mu, approximate=False):
     map = {i:id for i,id in enumerate(idF)}
     sz = len(idF)
     W = np.zeros((sz, sz))
-    for i, f in np.ndindex(sz, sz):
-        if i != f:
-            try:
-                gamma = 0.
-                for sigma in sigmadict[map[f],map[i]]:
-                    gamma += sigma.integrate(beta, mu, approximate)
-            except:
-                continue
-            W[i,i] -= gamma
-            W[f,i] += gamma
+    for extract, inject in np.ndindex(2, 2):
+        for i, f in np.ndindex(sz, sz):
+            if i != f:
+                try:
+                    gamma = 0.
+                    for sigma in sigmadict[map[f],map[i]]:
+                        gamma += integrate(sigma)(A, extract, inject, beta, mu)
+                except:
+                    continue
+                W[i,i] -= gamma
+                W[f,i] += gamma
     return W
 
 
-def build_transition_matrix(sigmadict, beta, mu, approximate=False):
+def build_transition_matrix(sigmadict, beta, mu, A, extract, inject, approx_integral=False):
     sz, odd = np.divmod(len(sigmadict), 2)
     assert ~odd, """
         Invalid sigma list. Each matrix element must contain 
         its complex conjugate.
     """
+    integrate = attrgetter('approximate') if approx_integral else attrgetter('integrate')
     idF = set([idF for idF, _ in sigmadict.keys()])
     map = {i:id for i,id in enumerate(idF)}
     sz = len(idF)
@@ -338,7 +359,8 @@ def build_transition_matrix(sigmadict, beta, mu, approximate=False):
         try:
             gamma = 0.
             for sigma in sigmadict[map[f],map[i]]:
-                gamma += sigma.integrate(beta, mu, approximate)
+                gamma += integrate(sigma)(A, extract, inject, beta, mu)
+                gamma -= integrate(sigma)(A, inject, extract, beta, mu)
         except:
             continue
         T[i,f] = gamma
