@@ -26,6 +26,9 @@ from edpyt.shared import (
 )
 
 from edpyt.operators import (
+    cdgc,
+    check_empty,
+    check_full,
     flip,
     fsgn,
     c,
@@ -125,18 +128,15 @@ def add_hoppings(ix_s, states, T, count, sp_mat):
 
     for i in range(T.shape[0]):
         # Check empty
-        if ((s>>i)&unsiged_dt(1)):
-            continue
-        for p in range(T.indptr[i], T.indptr[i+1]):
-            # Check occupied
-            j = T.indices[p]
-            if (not (s>>j)&unsiged_dt(1)):
-                continue
-            sgn_t, t = c(s, j)
-            sgn_f, f = cdg(t, i)
-            sp_mat.data[count] = T.data[p] * np.float64(sgn_t * sgn_f)
-            sp_mat.indices[count] = binsearch(states, f)
-            count += 1
+        if check_empty(s, i):
+            for p in range(T.indptr[i], T.indptr[i+1]):
+                # Check occupied
+                j = T.indices[p]
+                if check_full(s, j):
+                    sgn, f = cdgc(s, i, j)
+                    sp_mat.data[count] = T.data[p] * np.float64(sgn)
+                    sp_mat.indices[count] = binsearch(states, f)
+                    count += 1
 
     sp_mat.indptr[ix_s+1] = sp_mat.indptr[ix_s] + (count-init_count)
     return count

@@ -27,6 +27,19 @@ def fsgn(s, pos):
     return 1-2*(bits%2)
 
 
+@njit(['int64(uint32,int64,int64)',
+       'int32(uint32,int32,int32)'])
+def get_parity(s, i, j):
+    """Count the '1' bits in a state s between to sites i and j.    """
+    # Put i, j in order.
+    i, j = sorted((i, j))
+
+    bits = 0
+    for k in range(i+1, j):
+        bits += (s>>k)&1
+    return 1-2*(bits%2)
+
+
 @njit(['Tuple((int64,uint32))(uint32,int64)',
        'Tuple((int32,uint32))(uint32,int32)'])
 def cdg(s, pos):
@@ -67,6 +80,14 @@ def c(s, pos):
     assert s_out < s, "c error : c|0,...0_pos,>"
 
     return fermionic_sgn, s_out
+
+
+@njit(['Tuple((int64,uint32))(uint32,int64,int64)',
+       'Tuple((int32,uint32))(uint32,int32,int32)'])
+def cdgc(s, i, j):
+    f = (s^(unsigned_one<<j))^(unsigned_one<<i)
+    sgn = get_parity(s, i, j)
+    return sgn, f
 
 
 @njit(['uint32(uint32,int64)',
