@@ -76,7 +76,7 @@ def project_add(ispin_i, ispin_j, n, nupI, ndwI, espace):
     E = sctJ.eigvals[None,:]-sctI.eigvals[:,None]
     gf2elist = []
     for f,i in np.ndindex(v_FJ.shape[0],v_JI.shape[1]):
-        gf2elist.append(Gf2((nupF,ndwF,f),(nupI,ndwI,i),v_FJ[f],v_JI[:,i].copy(),E[i],dE[f,i]))
+        gf2elist.append(Gf2((nupF,ndwF,f),(nupI,ndwI,i),v_FJ[f],v_JI[:,i].copy(),E[i],dE[f,i],(nupJ,ndwJ)))
     return gf2elist
 
 
@@ -112,7 +112,7 @@ def project_sub(ispin_i, ispin_j, n, nupI, ndwI, espace):
     E = -sctJ.eigvals[None,:]+sctI.eigvals[:,None]
     gf2hlist = []
     for f,i in np.ndindex(v_FJ.shape[0],v_JI.shape[1]):
-        gf2hlist.append(Gf2((nupF,ndwF,f),(nupI,ndwI,i),v_FJ[f],v_JI[:,i].copy(),E[i],dE[f,i]))
+        gf2hlist.append(Gf2((nupF,ndwF,f),(nupI,ndwI,i),v_FJ[f],v_JI[:,i].copy(),E[i],dE[f,i],(nupJ,ndwJ)))
     return gf2hlist
 
 
@@ -201,7 +201,7 @@ class Gf2:
     #  y          ---------------- 
     #    nn'       E -( E   - E  )
     #                    m+    n' 
-    def __init__(self, idF, idI, vF, vI, E, dE) -> None:
+    def __init__(self, idF, idI, vF, vI, E, dE, nsJ) -> None:
         self.idF = idF
         self.idI = idI
         self.vF = vF
@@ -209,6 +209,7 @@ class Gf2:
         self.E = E
         self.dE = dE
         self.dS = (idF[0]-idI[0],idF[1]-idI[1])
+        self.nsJ = nsJ
         
     def __call__(self, z, aF, aI):
         z = np.atleast_1d(z)
