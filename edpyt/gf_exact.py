@@ -1,13 +1,7 @@
 import numpy as np
 from numba import vectorize, prange
 
-from edpyt.espace import (
-    build_espace
-)
-
 from edpyt.lookup import (
-    get_spin_indices,
-    get_state_index,
     binsearch
 )
 
@@ -16,7 +10,7 @@ from edpyt.shared import (
 )
 
 from edpyt.operators import (
-    cdg, check_full
+    c, cdg, check_empty, check_full
 )
 
 
@@ -45,7 +39,7 @@ class Gf:
         return res / self.Z
 
 
-def project_exact_up(pos, op, check_occupation, sctI, sctJ):
+def project_exact_up(pos, op, sctI, sctJ):
     """Project states of sector sctI onto eigenbasis of sector sctJ.
 
     """
@@ -56,18 +50,19 @@ def project_exact_up(pos, op, check_occupation, sctI, sctJ):
     #                     /____ i'i
     #                           (lattice sites)
     v0 = np.zeros((sctJ.eigvals.size,sctI.eigvals.size))
+    check_occupation = check_full if op is c else check_empty # if op is cdg
     for iupI in range(sctI.dup):
         supI = sctI.states.up[iupI]
         # Check for empty impurity
-        if check_occupation(supI, pos): continue
-        sgnJ, supJ = op(supI, pos)
-        iupJ = binsearch(sctJ.states.up, supJ)
-        v0 += np.float64(sgnJ)*sctJ.eigvecs[iupJ::sctJ.dup,:].T.dot(
-                               sctI.eigvecs[iupI::sctI.dup,:])
+        if check_occupation(supI, pos):
+            sgnJ, supJ = op(supI, pos)
+            iupJ = binsearch(sctJ.states.up, supJ)
+            v0 += np.float64(sgnJ)*sctJ.eigvecs[iupJ::sctJ.dup,:].T.dot(
+                                   sctI.eigvecs[iupI::sctI.dup,:])
     return v0
 
 
-def project_exact_dw(pos, op, check_occupation, sctI, sctJ):
+def project_exact_dw(pos, op, sctI, sctJ):
     """Project states of sector sctI onto eigenbasis of sector sctJ.
 
     """
@@ -78,14 +73,15 @@ def project_exact_dw(pos, op, check_occupation, sctI, sctJ):
     #                     /____ i'i
     #                           (lattice sites)
     v0 = np.zeros((sctJ.eigvals.size,sctI.eigvals.size))
+    check_occupation = check_full if op is c else check_empty # if op is cdg
     for idwI in range(sctI.dwn):
         sdwI = sctI.states.dw[idwI]
         # Check for empty impurity
-        if check_occupation(sdwI, pos): continue
-        sgnJ, sdwJ = op(sdwI, pos)
-        idwJ = binsearch(sctJ.states.dw, sdwJ)
-        v0 += np.float64(sgnJ)*sctJ.eigvecs[idwJ*sctJ.dup:(idwJ+1)*sctJ.dup,:].T.dot(
-                               sctI.eigvecs[idwI*sctI.dup:(idwI+1)*sctI.dup,:])
+        if check_occupation(sdwI, pos):
+            sgnJ, sdwJ = op(sdwI, pos)
+            idwJ = binsearch(sctJ.states.dw, sdwJ)
+            v0 += np.float64(sgnJ)*sctJ.eigvecs[idwJ*sctJ.dup:(idwJ+1)*sctJ.dup,:].T.dot(
+                                   sctI.eigvecs[idwI*sctI.dup:(idwI+1)*sctI.dup,:])
     return v0
 
 
@@ -129,7 +125,7 @@ def build_gf_exact(H, V, espace, beta, egs=0., pos=0, ispin=0):
         EI = (sctI.eigvals-egs)[None,:]
         EJ = (sctJ.eigvals-egs)[:,None]
         exponents = np.exp(-beta*EJ) + np.exp(-beta*EI)
-        bJ = project_exact(pos, cdg, check_full, sctI, sctJ)
+        bJ = project_exact(pos, cdg, sctI, sctJ)
         lambdas.extend((EJ - EI).flatten())
         qs.extend((bJ**2 * exponents).flatten())
 

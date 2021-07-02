@@ -42,15 +42,28 @@ def test_fer_algebra():
     assert sgn1*f1 + sgn2*f2 == 0
 
 
+def test_cdg():
+    s = int("1001101",base=2)
+    sgn, f = cdg(s, 1)
+    assert sgn==-1
+    assert f==int("1001111",base=2)
+
+def test_c():
+    s = int("1001101",base=2)
+    sgn, f = c(s, 2)
+    assert sgn==-1
+    assert f==int("1001001",base=2)
+
+
 def test_check_full():
 
-    s = int("101101",base=2)
+    s = int("1001101",base=2)
     assert check_full(s, 0)
     assert check_full(s, 2)
 
 def test_check_empty():
 
-    s = int("101101",base=2)
+    s = int("1001101",base=2)
     assert check_empty(s, 1)
     assert check_empty(s, 4)
     assert not check_empty(s, 3)

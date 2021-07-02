@@ -69,9 +69,9 @@ def project_add(ispin_i, ispin_j, n, nupI, ndwI, espace):
     v_JI = np.empty((sctJ.eigvals.size,sctI.eigvals.size,n))
     v_FJ = np.empty((sctF.eigvals.size,sctJ.eigvals.size,n))
     for j in range(n):
-        v_JI[...,j] = sgnI * proj_ispin_j(j, cdg, not_full, sctI, sctJ)
+        v_JI[...,j] = sgnI * proj_ispin_j(j, cdg, sctI, sctJ)
     for i in range(n):
-        v_FJ[...,i] = sgnJ * proj_ispin_i(i, c, not_empty, sctJ, sctF)
+        v_FJ[...,i] = sgnJ * proj_ispin_i(i, c, sctJ, sctF)
     dE = sctF.eigvals[:,None]-sctI.eigvals[None,:]
     E = sctJ.eigvals[None,:]-sctI.eigvals[:,None]
     gf2elist = []
@@ -105,9 +105,9 @@ def project_sub(ispin_i, ispin_j, n, nupI, ndwI, espace):
     v_JI = np.empty((sctJ.eigvals.size,sctI.eigvals.size,n))
     v_FJ = np.empty((sctF.eigvals.size,sctJ.eigvals.size,n))
     for j in range(n):
-        v_JI[...,j] = sgnI * proj_ispin_j(j, c, not_empty, sctI, sctJ)
+        v_JI[...,j] = sgnI * proj_ispin_j(j, c, sctI, sctJ)
     for i in range(n):
-        v_FJ[...,i] = sgnJ * proj_ispin_i(i, cdg, not_full, sctJ, sctF)
+        v_FJ[...,i] = sgnJ * proj_ispin_i(i, cdg, sctJ, sctF)
     dE = sctF.eigvals[:,None]-sctI.eigvals[None,:]
     E = -sctJ.eigvals[None,:]+sctI.eigvals[:,None]
     gf2hlist = []

@@ -5,7 +5,7 @@ from edpyt.espace import build_empty_sector, build_from_sector, solve_sector
 from edpyt.lanczos import build_sl_tridiag
 from edpyt.lookup import binsearch
 from edpyt.matvec_product import matvec_operator
-from edpyt.operators import c, cdg
+from edpyt.operators import c, cdg, check_empty, check_full
 from edpyt.operators import check_empty as not_empty
 from edpyt.operators import check_full as not_full
 from edpyt.tridiag import eigh_tridiagonal
@@ -52,7 +52,7 @@ class Gf:
         return out / self.Z
 
 
-def project_up(pos, op, check_occupation, sctI, sctJ):
+def project_up(pos, op, sctI, sctJ):
     """Project states of sector sctI onto eigenbasis of sector sctJ (nupJ=nupI+1).
 
     """
@@ -66,36 +66,30 @@ def project_up(pos, op, check_occupation, sctI, sctJ):
     #                iM   /__    iL,iI           iL
     #                        iL
     v0 = np.zeros((sctI.eigvals.size,sctJ.d))
-    idwI = np.arange(sctI.dwn) * sctI.dup
-    idwJ = np.arange(sctJ.dwn) * sctJ.dup #idwJ.size=idwI.size
+    check_occupation = check_full if op is c else check_empty # if op is cdg
     for iupI in range(sctI.dup):
         supI = sctI.states.up[iupI]
         # Check for empty impurity
-        if check_occupation(supI, pos): continue
-        sgnJ, supJ = op(supI, pos)
-        iupJ = binsearch(sctJ.states.up, supJ)
-        iL = iupI + idwI
-        iM = iupJ + idwJ
-        v0[:,iM] = np.float64(sgnJ)*sctI.eigvecs[iL,:].T
+        if check_occupation(supI, pos):
+            sgnJ, supJ = op(supI, pos)
+            iupJ = binsearch(sctJ.states.up, supJ)
+            v0[:,iupJ::sctJ.dup] = np.float64(sgnJ)*sctI.eigvecs[iupI::sctI.dup,:].T
     return v0
 
 
-def project_dw(pos, op, check_occupation, sctI, sctJ):
+def project_dw(pos, op, sctI, sctJ):
     """Project states of sector sctI onto eigenbasis of sector sctJ (ndwJ=ndwI+1).
 
     """
     v0 = np.zeros((sctI.eigvals.size,sctJ.d))
-    iupI = np.arange(sctI.dup)
-    iupJ = np.arange(sctJ.dup) # dupI=dupJ
+    check_occupation = check_full if op is c else check_empty # if op is cdg
     for idwI in range(sctI.dwn):
         sdwI = sctI.states.dw[idwI]
         # Check for empty impurity
-        if check_occupation(sdwI, pos): continue
-        sgnJ, sdwJ = op(sdwI, pos)
-        idwJ = binsearch(sctJ.states.dw, sdwJ)
-        iL = idwI*sctI.dup + iupI
-        iM = idwJ*sctJ.dup + iupJ
-        v0[:,iM] = np.float64(sgnJ)*sctI.eigvecs[iL,:].T
+        if check_occupation(sdwI, pos):
+            sgnJ, sdwJ = op(sdwI, pos)
+            idwJ = binsearch(sctJ.states.dw, sdwJ)
+            v0[:,idwJ*sctJ.dup:(idwJ+1)*sctJ.dup] = np.float64(sgnJ)*sctI.eigvecs[idwI*sctI.dup:(idwI+1)*sctI.dup,:].T
     return v0
 
 
@@ -192,7 +186,7 @@ def build_gf_lanczos(H, V, espace, beta, egs=0., pos=0, repr='cf', ispin=0, sepa
                 )
                 sctJ = build_from_sector(sctJ,eigvals=eigvals,eigvecs=eigvecs)
                 # <J|I>
-                bJ = project_exact(pos, cdg, not_full, sctI, sctJ)
+                bJ = project_exact(pos, cdg, sctI, sctJ)
                 # EJ-EI
                 l = sctJ.eigvals[:,None] - sctI.eigvals[None,:]
                 q = bJ**2 * exponents[None,:]
@@ -203,7 +197,7 @@ def build_gf_lanczos(H, V, espace, beta, egs=0., pos=0, repr='cf', ispin=0, sepa
             # solve with Lanczos
             else:
                 # <I|J>
-                v0 = project(pos, cdg, not_full, sctI, sctJ)
+                v0 = project(pos, cdg, sctI, sctJ)
                 matvec = matvec_operator(
                     *build_mb_ham(H, V, sctJ.states.up, sctJ.states.dw)
                 )
@@ -227,7 +221,7 @@ def build_gf_lanczos(H, V, espace, beta, egs=0., pos=0, repr='cf', ispin=0, sepa
                 )
                 sctJ = build_from_sector(sctJ,eigvals=eigvals,eigvecs=eigvecs)
                 # <J|I>
-                bJ = project_exact(pos, c, not_empty, sctI, sctJ)
+                bJ = project_exact(pos, c, sctI, sctJ)
                 # EI-EJ
                 l = - sctJ.eigvals[:,None] + sctI.eigvals[None,:]
                 q = bJ**2 * exponents[None,:]
@@ -238,7 +232,7 @@ def build_gf_lanczos(H, V, espace, beta, egs=0., pos=0, repr='cf', ispin=0, sepa
             # solve with Lanczos
             else:
                 # <I|J>
-                v0 = project(pos, c, not_empty, sctI, sctJ)
+                v0 = project(pos, c, sctI, sctJ)
                 matvec = matvec_operator(
                     *build_mb_ham(H, V, sctJ.states.up, sctJ.states.dw)
                 )
