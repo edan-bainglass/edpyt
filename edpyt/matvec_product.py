@@ -72,7 +72,7 @@ def _matvec_operator_mpi(vec_diag, sp_mat_up, sp_mat_dw, comm):
     return matvec
 
 
-def todense(vec_diag, sp_mat_up, sp_mat_dw):
+def todense(vec_diag, sp_mat_up=None, sp_mat_dw=None):
     """Construct dense matrix Hamiltonian explicitely.
 
     Returns:
@@ -81,6 +81,8 @@ def todense(vec_diag, sp_mat_up, sp_mat_dw):
     """
     # old, much slower
     # mat = diags(vec_diag) + kronsum(sp_mat_up, sp_mat_dw)
+    if sp_mat_up is None:
+        return np.diag(vec_diag)
     dup = sp_mat_up.shape[0]
     dwn = sp_mat_dw.shape[0]
     mat = np.kron(np.eye(dwn), sp_mat_up.todense()) \

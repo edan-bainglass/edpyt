@@ -330,6 +330,8 @@ def build_mb_ham(H, V, states_up, states_dw, z=None, comm=None):
 
     # Hoppings UP
     nnz_offdiag = count_nnz_offdiag(H[0])
+    if nnz_offdiag==0:
+        return (vec_diag, None, None)
     T = nnz_offdiag_csrmat(H[0], nnz_offdiag)
 
     nnz_up_count = nnz_offdiag * int(binom(n-2, nup-1))

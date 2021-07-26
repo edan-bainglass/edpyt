@@ -165,7 +165,6 @@ def build_transition_elements(n, egs, espace, cutoff=None):
     the ground state and the vectors reached by the latter (including the matrix
     elements connecting the latter vectors).
     """
-    # pspace = defaultdict(lambda : np.ndarray((2,2),dtype=object))
     ispin = [(0,0),(0,1),(1,0),(1,1)]
     dS = [(0,0),   # add up remove up
           (-1,1),  # add dw remove up
@@ -179,8 +178,8 @@ def build_transition_elements(n, egs, espace, cutoff=None):
     # are also included.
     sigmadict = defaultdict(list)
     for ns in np.unique(reached_by_gs,axis=0):
-        _ispin = [i for i,ds in zip(ispin,dS) if (ns[0]+ds[0],ns[1]+ds[1]) in reached_by_gs]
-        project_sector(n, ns[0], ns[1], espace, sigmadict, _ispin)
+        ispin_subset = [i for i,ds in zip(ispin,dS) if (ns[0]+ds[0],ns[1]+ds[1]) in reached_by_gs]
+        project_sector(n, ns[0], ns[1], espace, sigmadict, ispin_subset)
     if cutoff is not None:
         return screen_transition_elements(sigmadict, egs, espace, cutoff)
     return sigmadict
@@ -355,7 +354,7 @@ def build_transition_matrix(sigmadict, beta, mu, A, extract, inject, approx_inte
     idF = set([idF for idF, _ in sigmadict.keys()])
     map = {i:id for i,id in enumerate(idF)}
     sz = len(idF)
-    T = np.empty((sz, sz))
+    T = np.zeros((sz, sz))
     for i, f in np.ndindex(sz, sz):
         try:
             gamma = 0.
