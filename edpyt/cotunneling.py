@@ -18,8 +18,6 @@ from edpyt.gf_exact import (
     project_exact_dw)
 
 from edpyt.operators import (
-    check_empty as not_empty, 
-    check_full as not_full,
     cdg, c)
 
 @vectorize('float64(float64, float64)')
@@ -137,8 +135,8 @@ def project_sector(n, nupI, ndwI, espace, sigmadict, ispin=None):
     #                                                      
     #  __ll'ss'             +            1                       -               1      
     #  \        (E)  =  (  y   (ss') ----------------     +     y   (s's) ----------------   ) n(E - (E - E)  - u)  (1-  n(E - u))
-    #  /__                  nn'       E -( E   - E  )            nn'      E - (E   - E)               n   n'    L              R     
-    #     nn'                               m+    n'                             n'    m+
+    #  /__                  nn'       E -( E   - E  )            nn'      E - (E   - E)                n   n'    L              R     
+    #     nn'                               m+    n'                             n'    m-
     #                                                                                                                           
     if ispin is None: 
         ispin = [(0,0),(0,1),(1,0),(1,1)]
@@ -326,7 +324,7 @@ def build_rate_matrix(sigmadict, beta, mu, A, approx_integral=False):
         Invalid sigma list. Each matrix element must contain 
         its complex conjugate.
     """
-    idF = set([idF for idF, _ in sigmadict.keys()])
+    idF = sorted(set([idF for idF, _ in sigmadict.keys()]))
     map = {i:id for i,id in enumerate(idF)}
     sz = len(idF)
     W = np.zeros((sz, sz))
@@ -351,7 +349,7 @@ def build_transition_matrix(sigmadict, beta, mu, A, extract, inject, approx_inte
         its complex conjugate.
     """
     integrate = attrgetter('approximate') if approx_integral else attrgetter('integrate')
-    idF = set([idF for idF, _ in sigmadict.keys()])
+    idF = sorted(set([idF for idF, _ in sigmadict.keys()]))
     map = {i:id for i,id in enumerate(idF)}
     sz = len(idF)
     T = np.zeros((sz, sz))
@@ -363,7 +361,7 @@ def build_transition_matrix(sigmadict, beta, mu, A, extract, inject, approx_inte
                 gamma -= integrate(sigma)(A, inject, extract, beta, mu)
         except:
             continue
-        T[i,f] = gamma
+        T[f,i] = gamma
     return T
 
 
@@ -389,4 +387,13 @@ def find_active_sectors(ngs):
     for ns in np.unique(reached_by_gs,axis=0):
         active_sectors.extend([(ns[0]+dn[0],ns[1]+dn[1]) for ds in dS for dn in dN 
                                if (ns[0]+ds[0],ns[1]+ds[1]) in reached_by_gs])
-    return [tuple(ns) for ns in set(active_sectors)]
+    return sorted([tuple(ns) for ns in set(active_sectors)])
+
+
+def get_active_neig(n, ngs, val=2):
+    from edpyt.lookup import get_sector_index
+    neig = np.zeros((n+1)*(n+1),int)
+    idx = [get_sector_index(n,nup,ndw) for nup,ndw in find_active_sectors(ngs)]
+    for i in idx:
+        neig[i] = val
+    return neig

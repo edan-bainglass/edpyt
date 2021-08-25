@@ -1,11 +1,39 @@
 import numpy as np
 from collections import defaultdict
+from edpyt.espace import Sector, build_empty_sector
+from edpyt.cotunneling import (
+    build_transition_elements, 
+    build_rate_matrix,
+    build_transition_matrix, project_sector)
+from edpyt.rates import stationary_solution
 
 # from edpyt.espace import Sector, build_empty_sector
 # from edpyt.cotunneling import project
 
 
 # https://journals.aps.org/prb/pdf/10.1103/PhysRevB.77.045329
+
+
+n = 1
+eps = 0.2
+U = 0.25
+beta = 1000.
+mu = [0.,0.]
+A = np.ones((2,n))
+
+
+def build_espace(eps, U):
+    """Solve anderson model."""
+    n = 1
+    espace = defaultdict(Sector)
+    eigvals = [0.,eps,eps,eps+eps+U]
+    for i, (nup, ndw) in enumerate(np.ndindex((n+1, n+1))):
+        sct = build_empty_sector(n, nup, ndw)
+        sct.eigvecs = np.array(1., ndmin=2)
+        sct.eigvals = np.array(eigvals[i], ndmin=1)
+        espace[(nup,ndw)] = sct
+    egs = np.min(eigvals)
+    return espace, egs
 
 
 def test_project():
