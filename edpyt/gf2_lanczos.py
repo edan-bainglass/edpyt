@@ -1,95 +1,75 @@
 import numpy as np
 from functools import lru_cache
-from gf_lanczos import *
+from edpyt.gf_lanczos import *
 
+# Not automatically imported by gf_lanczos
+_reprs = ['cf','sp']
 
-class sGf():
-    def __init__(self, n, gfe, gfh) -> None:
-        self.n = n
-        self.gfe = gfe
-        self.gfe = gfh
-        # self.gfh.__call__ = lru_cache(self.gfh.__call__)
-        # self.gfe.__call__ = lru_cache(self.gfe.__call__)
+class _Gf2():
+    def __init__(self, gf) -> None:
+        self.n = gf.shape[0]
+        self.gf = gf
 
-    def build(self, e, eta):
-        n = self.n
-        gfe = np.empty((2,2,n,n),complex)
-        gfh = np.empty((2,2,n,n),complex)
+    @staticmethod
+    def evaluate(gf, e, eta):
+        
+        n = gf.shape[0]
+        G = np.empty((n,n,e.size),complex)
 
-        for ispin in range(2):
-            for ipos in range(n):
-                gfe[ispin,ispin,ipos,ipos] = self.gfe[ispin,ispin,ipos,ipos](e, eta)
-                gfh[ispin,ispin,ipos,ipos] = self.gfh[ispin,ispin,ipos,ipos](e, eta)
+        for ipos in range(n):
+            G[ipos,ipos] = gf[ipos,ipos](e, eta)
 
-        for ispin, jspin in np.ndindex(2,2):
-            if ispin==jspin: continue
-            for ipos in range(n):
-                gfe[ispin,jspin,ipos,ipos] = 0.5*(
-                    self.gfe[ispin,jspin,ipos,ipos](e, eta)
-                    - gfe[ispin,ispin,ipos,ipos]
-                    - gfe[jspin,jspin,ipos,ipos]
-                )
-                gfh[ispin,jspin,ipos,ipos] = 0.5*(
-                    self.gfh[ispin,jspin,ipos,ipos](e, eta)
-                    - gfh[ispin,ispin,ipos,ipos]
-                    - gfh[jspin,jspin,ipos,ipos]
-                )
+        for ipos in range(n):
+            for jpos in range(ipos+1,n):
+                G[ipos,jpos] = 0.5*(gf[ipos,jpos](e,eta)-G[ipos,ipos]-G[jpos,jpos])
+                G[jpos,ipos] = G[ipos,jpos]
 
-        for ispin in range(2):
-            for ipos, jpos in np.ndindex(n,n):
-                if ipos==jpos: continue
-                gfe[ispin,ispin,ipos,jpos] = 0.5*(
-                    self.gfe[ispin,ispin,ipos,jpos](e, eta)
-                    - gfe[ispin,ispin,ipos,ipos]
-                    - gfe[ispin,ispin,jpos,jpos]
-                )
-                gfh[ispin,ispin,ipos,jpos] = 0.5*(
-                    self.gfh[ispin,ispin,ipos,jpos](e, eta)
-                    - gfh[ispin,ispin,ipos,ipos]
-                    - gfh[ispin,ispin,jpos,jpos]
-                )
-
-        for ispin, jspin in np.ndindex(2,2):
-            if ispin==jspin: continue
-            for ipos, jpos in np.ndindex(n,n):
-                if ipos==jpos: continue
-                gfe[ispin,jspin,ipos,jpos] = 0.5*(
-                    self.gfe[ispin,jspin,ipos,jpos](e, eta)
-                    - gfe[ispin,ispin,ipos,ipos]
-                    - gfe[jspin,jspin,jpos,jpos]
-                )
-                gfe[ispin,jspin,ipos,jpos] = 0.5*(
-                    self.gfh[ispin,jspin,ipos,jpos](e, eta)
-                    - gfh[ispin,ispin,ipos,ipos]
-                    - gfh[jspin,jspin,jpos,jpos]
-                )
-
-        self.gfe_ = gfe
-        self.gfh_ = gfh
+        return G
+    
+    def __getitem__(self, ij):
+        i,j = ij
+        if i==j:
+            return self.gf[i,j]
+        return lambda e, eta: 0.5*(self.gf[i,j](e,eta)
+                                   -self.gf[i,i](e,eta)
+                                   -self.gf[j,j](e,eta))
 
     def __call__(self, e, eta):
-        self.build(e, eta)
-        return self.gfe_ + self.gfh_
-
-    @property
-    def e(self, ispin, jspin, ipos, jpos):
-        return self.gfe_[ispin,jspin,ipos,jpos]
+        return self.evaluate(self.gf, e, eta)
     
-    @property
-    def h(self, ispin, jspin, ipos, jpos):
-        return self.gfh_[ispin,jspin,ipos,jpos]
+class Gf2:
     
+    def __new__(cls, gfe, gfh=None):
+        if gfh is None:
+            return _Gf2(gfe)
+        return super().__new__(cls)
+    
+    def __init__(self, gfe, gfh) -> None:
+        self.Gf2e = _Gf2(gfe)
+        self.Gf2h = _Gf2(gfh)
+        
+    def __getitem__(self, ij):
+        i,j = ij
+        return lambda e, eta: self.Gf2e[i,j](e,eta) + self.Gf2h[i,j](e,eta)
+        
+    def __call__(self, e, eta):
+        return self.Gf2e(e, eta), self.Gf2h(e, eta)
 
 
-def build_gf_offdiag(H, V, espace, beta, ipos, jpos, ispin, jspin, egs=0., repr='cf'):
+def build_gf_offdiag(H, V, espace, beta, ipos, jpos, ispin=0, egs=0., repr='cf', separate=False):
+    """Build off-diagonal element of the + green's function."""
+    # + green's function (see https://arxiv.org/pdf/0806.2690.pdf Eq. 33)
+    
     n = H.shape[-1]
-    irepr =_reprs.index(repr)
+    irepr = _reprs.index(repr)
     gf_kernel = [continued_fraction, spectral][irepr]
     build_gf_coeff = [build_gf_coeff_cf, build_gf_coeff_sp][irepr]
-    iproj = [project_up, project_dw][ispin]
-    jproj = [project_up, project_dw][jspin]
+    project = [project_up, project_dw][ispin]
     gfe = Gf()
-    gfh = Gf()
+    if separate:
+        gfh = Gf()
+    else:
+        gfh = gfe
 
     for nupI, ndwI in espace.keys():
         sctI = espace[(nupI,ndwI)]
@@ -97,14 +77,14 @@ def build_gf_offdiag(H, V, espace, beta, ipos, jpos, ispin, jspin, egs=0., repr=
 
         try: # Add spin (N+1 sector)
             nupJ, ndwJ = get_cdg_sector(n, nupI, ndwI, ispin)
-        except ValueError: # More spin than spin states
+        except OutOfHilbertError: # More spin than spin states
             pass
         else:
             sctJ = espace.get((nupJ, ndwJ), None) or build_empty_sector(n, nupJ, ndwJ)
             #              +        +
             # Apply      c     + c
             #             i,s      i's'
-            v0 = iproj(ipos, cdg, not_full, sctI, sctJ) + jproj(jpos, cdg, not_full, sctI, sctJ)
+            v0 = project(ipos, cdg, sctI, sctJ) + project(jpos, cdg, sctI, sctJ)
             matvec = matvec_operator(
                 *build_mb_ham(H, V, sctJ.states.up, sctJ.states.dw)
             )
@@ -117,7 +97,7 @@ def build_gf_offdiag(H, V, espace, beta, ipos, jpos, ispin, jspin, egs=0., repr=
 
         try: # Remove spin (N-1 sector)
             nupJ, ndwJ = get_c_sector(nupI, ndwI, ispin)
-        except ValueError: # Negative spin
+        except OutOfHilbertError: # Negative spin
             pass
         else:
             # Arrival sector
@@ -125,7 +105,7 @@ def build_gf_offdiag(H, V, espace, beta, ipos, jpos, ispin, jspin, egs=0., repr=
             #
             # Apply      c     + c
             #             i,s      i's'
-            v0 = iproj(ipos, c, not_empty, sctI, sctJ) + jproj(jpos, c, not_empty, sctI, sctJ)
+            v0 = project(ipos, c, sctI, sctJ) + project(jpos, c, sctI, sctJ)
             matvec = matvec_operator(
                 *build_mb_ham(H, V, sctJ.states.up, sctJ.states.dw)
             )
@@ -142,30 +122,40 @@ def build_gf_offdiag(H, V, espace, beta, ipos, jpos, ispin, jspin, egs=0., repr=
     gfe.Z = Z
     gfh.Z = Z
 
-    return gfe, gfh
+    if separate:
+        return gfe, gfh
+    return gfe
 
 
-def build_gf2_lanczos(H, V, espace, beta, egs=0., pos=0.):
+def build_gf2_lanczos(H, V, espace, beta, egs=0., ispin=0, repr='cf', separate=False):
 
-    gfe = [None]*4
-    gfh = [None]*4
     n = H.shape[-1]
+    gfe = np.ndarray((n,n),object)
+    gfh = None
+    
+    if separate:
+        gfh = np.ndarray((n,n),object)
+        def add(i, j, gf):
+            gfe[i,j] = gf[0]
+            gfh[i,j] = gf[1]
+    else:
+        def add(i, j, gf):
+            gfe[i,j] = gf
 
     #   ss
     # G
     #   ii    
-    for ispin in range(2):
-        for ipos in range(n):
-            gfe[ispin,ispin,ipos,ipos], gfh[ispin,ispin,ipos,ipos] = build_gf_lanczos(
-                H, V, espace, beta, egs, ipos, ispin, separate=True)
-
-    #   ss'
+    for ipos in range(n):
+        gf = build_gf_lanczos(
+            H, V, espace, beta, egs, ipos, repr, ispin, separate)
+        add(ipos,ipos,gf)
+    #   ss
     # G
     #   ii' 
-    for ispin, jspin in np.ndindex(2,2):
-        for ipos, jpos in np.ndindex(n,n):
-            gfe[ispin,jspin,ipos,jpos], gfh[ispin,jspin,ipos,jpos] = build_gf_offdiag(
-                H, V, espace, ipos, ispin, jpos, jspin)
+    for ipos in range(n):
+        for jpos in range(ipos+1,n):
+            gf = build_gf_offdiag(
+                H, V, espace, beta, ipos, jpos, ispin, egs, repr, separate)
+            add(ipos,jpos,gf)
 
-
-    return sGf(n, gfe, gfh)
+    return Gf2(gfe, gfh)
