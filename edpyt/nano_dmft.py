@@ -81,8 +81,8 @@ class Gfloc:
             for sigma_, z_, out in it:
                 x = self.free(z_[0], inverse=True)
                 x.flat[::(self.n+1)] -= sigma_[self.idx_inv]
-                out[...] = np.linalg.inv(x).diagonal()[self.idx_neq]
-            return it.operands[2]
+                out[self.idx_neq,...] = np.linalg.inv(x).diagonal()[self.idx_neq]
+            return it.operands[2][self.idx_neq,...]
                 # out[self.idx_world,...] = np.linalg.inv(x).diagonal()[self.idx_neq]
             # return it.operands[2][self.idx_world,...]
 
