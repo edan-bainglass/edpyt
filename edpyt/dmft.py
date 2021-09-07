@@ -385,8 +385,9 @@ class DMFT:
         dmft_step(delta, self.gfimp, self.gfloc)
         delta_new = self.gfloc.Delta(self.z)
         # occp = self.gfimp.integrate()
-        occp = self.gfloc.integrate()
-        return occp, delta_new
+        # occp = self.gfloc.integrate()
+        return self.occupancy_goal, delta_new
+        # return occp, delta_new
 
     def distance(self, delta):
         eps = self(delta) - delta
@@ -398,7 +399,7 @@ class DMFT:
         non_causal = delta.imag>0 # ensures that the imaginary part is negative
         delta[non_causal].imag = -1e-20
         occp, delta_new = self.step(delta)
-        print(f'Occupation : {occp:.5f} Chemical potential : {self.gfloc.mu:.5f}', end=' ')
+        # print(f'Occupation : {occp:.5f} Chemical potential : {self.gfloc.mu:.5f}', end=' ')
         eps = np.linalg.norm(delta_new - delta)
         print(f'Error : {eps:.5f}')
         if eps < self.tol:
