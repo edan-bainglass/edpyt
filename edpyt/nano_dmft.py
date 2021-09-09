@@ -1,3 +1,4 @@
+from edpyt.fit import fit_hybrid
 import numpy as np
 
 from edpyt.integrate_gf import integrate_gf
@@ -175,8 +176,10 @@ class Gfimp:
 
     def fit(self, delta):
         """Fit discrete bath."""
+        popt, fopt = fit_hybrid(delta, self.n-1, self.nmats, 
+                                self.beta, self.tol_fit, self.max_fit)
         for i, gf in enumerate(self):
-            gf.fit(delta[i,...])
+            gf.set_bath(popt[i], fopt[i])
 
     def Sigma(self, z):
         """Correlated self-energy."""

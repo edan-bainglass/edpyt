@@ -3,6 +3,7 @@ import numpy as np
 from numba import njit
 from numba import types
 from numba.extending import intrinsic
+import os
 
 from numba.core import cgutils
 
@@ -10,7 +11,7 @@ from numba.core import cgutils
 # ctypes :: https://stackoverflow.com/questions/58923637/f2py-linking-quadmath-libraries-use-ctypes-for-fortran-wrapper-instead
 # numba ptr :: https://stackoverflow.com/questions/51541302/how-to-wrap-a-cffi-function-in-numba-taking-pointers
 
-lib = ct.cdll.LoadLibrary('./dcsrch.so')
+lib = ct.cdll.LoadLibrary(os.path.dirname(os.path.abspath(__file__))+'/dcsrch.so')
 lib.dcsrch_.argtypes = [ct.POINTER(ct.c_double), ct.POINTER(ct.c_double), ct.POINTER(ct.c_double), 
                         ct.POINTER(ct.c_double), ct.POINTER(ct.c_double), ct.POINTER(ct.c_double), 
                         ct.POINTER(ct.c_int8), ct.POINTER(ct.c_double), ct.POINTER(ct.c_double), 

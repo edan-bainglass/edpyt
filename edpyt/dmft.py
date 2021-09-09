@@ -1,8 +1,10 @@
+from warnings import warn
+
 import numpy as np
 from scipy.optimize import root_scalar, broyden1
 
 from edpyt.integrate_gf import integrate_gf
-from edpyt.fit import fit_hybrid
+from edpyt.fit import fit_hybrid, Delta
 from edpyt.espace import adjust_neigsector, build_espace, screen_espace
 from edpyt.gf_lanczos import build_gf_lanczos
 
@@ -51,22 +53,26 @@ class Gfimp:
         #           !    \               Vk  
         # Delta(z)  =                 -------
         #                /__k = 0      z - ek
-        n = self.n
-        fopt = np.inf; it = 0
-        while (fopt>self.tol_fit)&(it<self.max_fit):
-            Delta_disc, fopt = fit_hybrid(Delta, n-1, self.nmats, self.beta, full_output=True)
-            it += 1
-        self.Delta = Delta_disc
+        
+        popt, fopt = fit_hybrid(Delta, self.n-1, self.nmats, 
+                                self.beta, self.tol_fit, self.max_fit)
+        self.set_bath(popt, fopt)
+    
+    def set_bath(self, popt, fopt):
+        """Update with fitted bath parametrization."""
+        if fopt>self.tol_fit:
+            warn(f"""Fit optimization {fopt} worse than tollerance {self.tol_fit}.""")
+        self.Delta = Delta(popt) #Delta_disc
         self.H[1:,0] = self.H[0,1:] = self.vk
-        self.H.flat[(n+1)::(n+1)] = self.ek
-
+        self.H.flat[(self.n+1)::(self.n+1)] = self.ek
+        
     @property
     def vk(self):
-        return self.Delta.b
+        return self.Delta.vk
 
     @property
     def ek(self):
-        return self.Delta.a
+        return self.Delta.ek
 
     @property
     def mu(self):
@@ -149,6 +155,8 @@ class SpinGfimp:
         self.Delta = None
         self.neig = neig # used in diagonalization
         self.gfimp = [None, None]
+        self.tol_fit = tol_fit
+        self.max_fit = max_fit
         # Build gfimp's for each spin and make them point to self.H[spin].
         # This is a bad hack to avoid creating gfimp.H & gfimp.V since they
         # must point to the same (spin dependent) Hamiltonian and onsite
@@ -168,9 +176,9 @@ class SpinGfimp:
     def mu(self):
         return -self.H[0,0,0]
 
-    def fit(self, Delta):
-        for gfimp, delta in zip(self, Delta):
-            gfimp.fit(delta)
+    def set_bath(self, popt, fopt):
+        for i, gfimp in enumerate(self):
+            gfimp.set_bath(popt[i],fopt[i])
 
     def update(self, mu):
         self.H[:,0,0] = -mu

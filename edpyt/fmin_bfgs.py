@@ -17,7 +17,7 @@ def _minimize_bfgs(f, x0, maxiter=None, gtol=1e-5):
     if maxiter is None:
         maxiter = 200 * len(x0)
 
-    old_fval = f(x0)
+    old_fval = f.call(x0)
     gfk = approx_derivative(f, x0)
 
     k = 0
@@ -89,8 +89,8 @@ def _dense_difference(fun, x0, h):
         x1 = x0 - h_vecs[i]
         x2 = x0 + h_vecs[i]
         dx = x2[i] - x1[i]
-        f1 = fun(x1)
-        f2 = fun(x2)
+        f1 = fun.call(x1)
+        f2 = fun.call(x2)
         df = f2 - f1
 
         J_transposed[i] = df / dx
@@ -136,7 +136,7 @@ def scalar_search_wolfe1(f, phi0, old_phi0, derphi0, xk, pk,
                                           amin, amax, isave, dsave)
         if np.all(FG==task[:2]):
             alpha1 = stp
-            phi1 = f(xk+stp*pk)
+            phi1 = f.call(xk+stp*pk)
             gval = approx_derivative(f, xk+stp*pk)
             derphi1 = np.dot(gval, pk)
         else:
@@ -178,7 +178,7 @@ def scalar_search_wolfe2(f, phi0, old_phi0, derphi0, xk, pk,
 
     alpha1 = min(alpha1, amax)
 
-    phi_a1 = f(xk+alpha1*pk)
+    phi_a1 = f.call(xk+alpha1*pk)
     #derphi_a1 = derphi(alpha1) evaluated below
 
     phi_a0 = phi0
@@ -225,7 +225,7 @@ def scalar_search_wolfe2(f, phi0, old_phi0, derphi0, xk, pk,
         alpha0 = alpha1
         alpha1 = alpha2
         phi_a0 = phi_a1
-        phi_a1 = f(xk+alpha1*pk)
+        phi_a1 = f.call(xk+alpha1*pk)
         derphi_a0 = derphi_a1
 
     else:
@@ -339,7 +339,7 @@ def _zoom(a_lo, a_hi, phi_lo, phi_hi, derphi_lo,
 
         # Check new value of a_j
 
-        phi_aj = f(xk+a_j*pk)
+        phi_aj = f.call(xk+a_j*pk)
         if (phi_aj > phi0 + c1*a_j*derphi0) or (phi_aj >= phi_lo):
             phi_rec = phi_hi
             a_rec = a_hi
