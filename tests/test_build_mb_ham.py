@@ -8,6 +8,7 @@ from edpyt.sector import (
     generate_states
 )
 
+from edpyt.matvec_product import todense
 
 t12 = -1.
 t21 = -1.
@@ -48,10 +49,11 @@ def test_build_mb_ham():
     # mb_ham = np.diag(i_vals) \
     #          + np.kron(iup_mat.todense(), np.eye(dwn)) \
     #          + np.kron(np.eye(dup), idw_mat.todense())
-    mb_ham = + np.kron(np.eye(dwn), iup_mat.todense()) \
-             + np.kron(idw_mat.todense(), np.eye(dup))
+    mb_ham = todense(i_vals, iup_mat, idw_mat)
+        #  np.diag(i_vals) \
+        #  + np.kron(iup_mat.todense(), np.eye(dwn)) \
+        #  + np.kron(np.eye(dup), idw_mat.todense())
 
-    mb_ham.flat[::mb_ham.shape[0]+1] += i_vals
     # states :: 01, 10
 
     #
@@ -97,9 +99,10 @@ def test_build_mb_ham():
     dup = iup_mat.shape[0]
     dwn = idw_mat.shape[0]
 
-    mb_ham = np.diag(i_vals) \
-             + np.kron(iup_mat.todense(), np.eye(dwn)) \
-             + np.kron(np.eye(dup), idw_mat.todense())
+    mb_ham = todense(i_vals, iup_mat, idw_mat)
+            #  np.diag(i_vals) \
+            #  + np.kron(iup_mat.todense(), np.eye(dwn)) \
+            #  + np.kron(np.eye(dup), idw_mat.todense())
 
     #
     # state :   |up,dw>   |up,dw>
@@ -130,9 +133,10 @@ def test_build_mb_ham():
     dup = iup_mat.shape[0]
     dwn = idw_mat.shape[0]
 
-    mb_ham = np.diag(i_vals) \
-             + np.kron(iup_mat.todense(), np.eye(dwn)) \
-             + np.kron(np.eye(dup), idw_mat.todense())
+    mb_ham = todense(i_vals, iup_mat, idw_mat)
+            #  np.diag(i_vals) \
+            #  + np.kron(iup_mat.todense(), np.eye(dwn)) \
+            #  + np.kron(np.eye(dup), idw_mat.todense())
 
     #
     # state :   |up,dw>   |up,dw>

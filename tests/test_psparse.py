@@ -27,3 +27,14 @@ def test_psparse_DWmultiply():
 
     _psparse.DWmultiply(A,w,result)
     np.testing.assert_allclose(result, A.dot(W).flatten())
+
+
+def test_psparse_Multiply():
+    n = 5
+
+    A = scipy.sparse.random(n, n, density=0.4, format='csr')
+    w = np.random.random(n)
+    result = np.zeros_like(w)
+
+    _psparse.Multiply(A,w,result)
+    np.testing.assert_allclose(result, A.dot(w))

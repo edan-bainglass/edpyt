@@ -1,11 +1,10 @@
 import numpy as np
-from scipy.sparse import (
-    csr_matrix, kronsum, random)
+from scipy.sparse import kronsum, random
 from time import perf_counter
 
-from edpyt.matvec_product import (
-    matvec_operator, todense
-)
+from edpyt.ham_hopping import DwHopping, UpHopping
+from edpyt.ham_local import Local
+from edpyt.matvec_product import matvec_operator, todense
 
 
 def test_matvec_product():
@@ -13,11 +12,10 @@ def test_matvec_product():
     dup = 10
     dwn = 20
 
-    Hup = random(dup,dup,density=0.3,format='csr')
-    Hdw = random(dwn,dwn,density=0.3,format='csr')
-    Hdd = np.random.random(dup*dwn)
-    Iup = np.eye(dup)
-    Idw = np.eye(dwn)
+    Hup = UpHopping(random(dup,dup,density=0.3,format='csr'),dwn)
+    Hdw = DwHopping(random(dwn,dwn,density=0.3,format='csr'),dup)
+    Hdd = np.random.random(dup*dwn).view(Local)
+
     H = todense(Hdd, Hup, Hdw)
 
     vec = np.random.random(dup*dwn)
@@ -28,7 +26,7 @@ def test_matvec_product():
     e = perf_counter()
     print(e-s)
     assert np.allclose(H.dot(vec), res)
-
+    
 
 def time_kronsum():
 

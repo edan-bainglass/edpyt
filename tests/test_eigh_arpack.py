@@ -1,3 +1,5 @@
+from edpyt.ham_hopping import DwHopping, UpHopping
+from edpyt.ham_local import Local
 import numpy as np
 import scipy
 from scipy.sparse import linalg as sla
@@ -14,9 +16,9 @@ from edpyt.matvec_product import (
 def test_eigh_arpack():
     m = 20
     n = 10
-    Hdd = np.random.random(m*n)
-    Hup = scipy.sparse.random(m, m, format='csr', density=0.3)
-    Hdw = scipy.sparse.random(n, n, format='csr', density=0.3)
+    Hdd = np.random.random(m*n).view(Local)
+    Hup = UpHopping(scipy.sparse.random(m, m, format='csr', density=0.3),n)
+    Hdw = DwHopping(scipy.sparse.random(n, n, format='csr', density=0.3),m)
 
     matvec = matvec_operator(Hdd, Hup, Hdw)
 

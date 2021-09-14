@@ -94,3 +94,34 @@ def DWmultiply(X not None, np.ndarray[ndim=1, mode='c', dtype=np.float64_t] W no
     for i in prange(ndw, nogil=True):
         # Parallelize over rows
         csr_saxpy(&csX, &W[0], &result[0], i, nup)
+
+
+@cython.boundscheck(False)
+def Multiply(X not None, np.ndarray[ndim=1, mode='c', dtype=np.float64_t] W not None,
+           np.ndarray[ndim=1, mode='c', dtype=np.float64_t] result not None):
+    """Multiply full vector.
+
+    """
+    if X.format == 'csc':
+        raise NotImplementedError('csc format not supported.')
+
+    cdef int i, nup, ndw, p
+    cdef cs csX
+    cdef np.ndarray[csi, ndim=1, mode = 'c'] indptr  = X.indptr
+    cdef np.ndarray[csi, ndim=1, mode = 'c'] indices = X.indices
+    cdef np.ndarray[double, ndim=1, mode = 'c'] data = X.data
+
+    # Pack the scipy data into the CSparse struct. This is just copying some
+    # pointers.
+    csX.nzmax = X.data.shape[0]
+    csX.m = X.shape[0]
+    csX.n = X.shape[1]
+    csX.p = &indptr[0]
+    csX.i = &indices[0]
+    csX.x = &data[0]
+    csX.nz = 1
+
+    for i in prange(csX.m, nogil=True):
+        # Parallelize over rows
+        for p in range(csX.p[i], csX.p[i+1]):
+            result[i] += csX.x[p] * W[ csX.i[p] ]

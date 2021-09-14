@@ -122,7 +122,7 @@ def fit_hybrid(vals_true, nbath=7, nmats=3000, beta=70., tol_fit=5., max_fit=5):
     nfit = np.prod(shape)
     nparams = 2*nbath
     generate_random = lambda n: (2*np.random.random(n*nparams)-1).reshape(n,nparams)
-    vals_true.shape = (nfit, nmats)
+    vals_true = vals_true.reshape(nfit, nmats)
     popt = np.empty((nfit, nparams))
     fopt = np.ones(nfit) + tol_fit
     it = 0

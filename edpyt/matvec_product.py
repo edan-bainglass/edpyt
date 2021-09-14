@@ -13,7 +13,7 @@ from scipy.sparse import (
 
 """
 
-def matvec_operator(vec_diag, sp_mat_up, sp_mat_dw, comm=None):
+def matvec_operator(*operators, comm=None):
     """Sparse matrix vector operator.
     
     Args:
@@ -21,12 +21,12 @@ def matvec_operator(vec_diag, sp_mat_up, sp_mat_dw, comm=None):
             is assumed to be diveded along spin-down dimension.
     """
     if comm is None:
-        return _matvec_operator(vec_diag, sp_mat_up, sp_mat_dw)
+        return _matvec_operator(*operators)
     else:
-        return _matvec_operator_mpi(vec_diag, sp_mat_up, sp_mat_dw, comm)
+        return _matvec_operator_mpi(*operators, comm=comm)
 
 
-def _matvec_operator(vec_diag, sp_mat_up, sp_mat_dw):
+def _matvec_operator(*operators):
     """Sparse matrix vector operator.
 
     Returns:
@@ -34,11 +34,11 @@ def _matvec_operator(vec_diag, sp_mat_up, sp_mat_dw):
             Returns returns H * v.
 
     """
-    def matvec(vec):
-        res = vec_diag * vec
-        _psparse.UPmultiply(sp_mat_up,vec,res)
-        _psparse.DWmultiply(sp_mat_dw,vec,res)
-        return res
+    def matvec(vec, res=None):
+        out = res or np.empty_like(vec)
+        for op in operators:
+            op.matvec(vec, out=out)
+        return out
     return matvec
 
 
@@ -72,21 +72,24 @@ def _matvec_operator_mpi(vec_diag, sp_mat_up, sp_mat_dw, comm):
     return matvec
 
 
-def todense(vec_diag, sp_mat_up=None, sp_mat_dw=None):
+def todense(*operators):
     """Construct dense matrix Hamiltonian explicitely.
 
     Returns:
         H
 
     """
-    # old, much slower
-    # mat = diags(vec_diag) + kronsum(sp_mat_up, sp_mat_dw)
-    if sp_mat_up is None:
-        return np.diag(vec_diag)
-    dup = sp_mat_up.shape[0]
-    dwn = sp_mat_dw.shape[0]
-    mat = np.kron(np.eye(dwn), sp_mat_up.todense()) \
-        + np.kron(sp_mat_dw.todense(), np.eye(dup))
-    d = mat.shape[0]
-    mat.flat[::d+1] += vec_diag
-    return mat
+    diag_op = []
+    ops = []
+    for op in operators:
+        if op.ndim<2:
+            diag_op.append(op)
+        else:
+            ops.append(op)
+    out = ops.pop().todense()
+    n = out.shape[0]
+    for op in ops:
+        out += op.todense()
+    for dop in diag_op:
+        out.flat[::n+1] += dop
+    return out
