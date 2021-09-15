@@ -147,8 +147,8 @@ class Gfloc:
         #     occps = occps_loc
         # occps = np.squeeze(occps[self.idx_inv,...])
         if occps.ndim<2:
-            return 2. * occps.sum()
-        return occps.sum()
+            return 2. * occps#.sum()
+        return occps.sum(1)#.sum()
 
 
 class Gfimp:

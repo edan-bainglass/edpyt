@@ -321,9 +321,7 @@ def dmft_step_adjust(delta, gfimp, gfloc, occupancy_goal):
     """Perform a DMFT self-consistency step and adjust chemical potential to 
     target occupation (for both local and impurity green's functions."""
     dmft_step(delta, gfimp, gfloc)
-    # mu = adjust_mu(gfimp, occupancy_goal)
     mu = adjust_mu(gfloc, occupancy_goal)
-    # gfimp.update(mu)
     gfloc.update(mu)
 
 
@@ -366,7 +364,7 @@ class DMFT:
             return : the error w.r.t. the previous iteration
     """
     
-    def __init__(self, gfimp, gfloc, occupancy_goal=None, max_iter=20, tol=1e-3):
+    def __init__(self, gfimp, gfloc, occupancy_goal=None, max_iter=20, tol=1e-3, adjust_mu=False):
         self.gfimp = gfimp
         self.gfloc = gfloc
         self.occupancy_goal = occupancy_goal
@@ -376,6 +374,7 @@ class DMFT:
         wn = (2*np.arange(gfimp.nmats)+1)*np.pi/gfimp.beta
         self.z = 1.j*wn
         self.delta = None
+        self.adjust_mu = adjust_mu
 
     def initialize(self, U, Sigma):
         mu = U/2.
@@ -390,12 +389,14 @@ class DMFT:
         return self.gfloc.Delta(self.z)
 
     def step(self, delta):
-        dmft_step(delta, self.gfimp, self.gfloc)
+        if self.adjust_mu:
+            dmft_step_adjust(delta, self.gfimp, self.gfloc, self.occupancy_goal)
+            occp = self.gfloc.integrate()
+        else:
+            dmft_step(delta, self.gfimp, self.gfloc)
+            occp = self.occupancy_goal
         delta_new = self.gfloc.Delta(self.z)
-        # occp = self.gfimp.integrate()
-        # occp = self.gfloc.integrate()
-        return self.occupancy_goal, delta_new
-        # return occp, delta_new
+        return np.sum(occp), delta_new
 
     def distance(self, delta):
         eps = self(delta) - delta
@@ -407,7 +408,7 @@ class DMFT:
         non_causal = delta.imag>0 # ensures that the imaginary part is negative
         delta[non_causal].imag = -1e-20
         occp, delta_new = self.step(delta)
-        # print(f'Occupation : {occp:.5f} Chemical potential : {self.gfloc.mu:.5f}', end=' ')
+        print(f'Occupation : {occp:.5f} Chemical potential : {self.gfloc.mu:.5f}', end=' ')
         eps = np.linalg.norm(delta_new - delta)
         print(f'Error : {eps:.5f}')
         if eps < self.tol:
