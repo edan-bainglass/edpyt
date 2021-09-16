@@ -35,7 +35,7 @@ class Gfimp:
 
     """
 
-    def __init__(self, n, nmats=3000, U=3., beta=1e6, neig=None, tol_fit=10., max_fit=3):
+    def __init__(self, n, nmats=3000, U=3., beta=1e6, neig=None, tol_fit=10., max_fit=3, alpha=0.):
         self.n = n
         self.nmats = nmats # Used in Matsubara fit. 
         self.beta = beta # Used in Matsubara fit and interacting green's function.
@@ -43,9 +43,10 @@ class Gfimp:
         self.V = np.zeros((n,n))
         self.V[0,0] = U
         self.Delta = None
-        self.neig = neig # used in diagonalization
+        self.neig = neig # used in diagonalization.
         self.tol_fit = tol_fit
         self.max_fit = max_fit
+        self.alpha = alpha # wieght matzubara frequency factor.
 
     def fit(self, Delta):
         """Fit hybridization and update bath params."""
@@ -55,7 +56,8 @@ class Gfimp:
         #                /__k = 0      z - ek
         
         popt, fopt = fit_hybrid(Delta, self.n-1, self.nmats, 
-                                self.beta, self.tol_fit, self.max_fit)
+                                self.beta, self.tol_fit, 
+                                self.max_fit, self.alpha)
         self.set_bath(popt, fopt)
     
     def set_bath(self, popt, fopt):
@@ -145,7 +147,7 @@ class SpinGfimp:
     NOTE: Arrays of this class have the general shape = (2, z.size)
     """
 
-    def __init__(self, n, nmats=3000, U=3., beta=1e6, neig=None, tol_fit=10., max_fit=3):
+    def __init__(self, n, nmats=3000, U=3., beta=1e6, neig=None, tol_fit=10., max_fit=3, alpha=0.):
         self.nmats = nmats # Used in Matsubara fit. 
         self.beta = beta # Used in Matsubara fit and interacting green's function.
         self.n = n
@@ -157,6 +159,7 @@ class SpinGfimp:
         self.gfimp = [None, None]
         self.tol_fit = tol_fit
         self.max_fit = max_fit
+        self.alpha = alpha
         # Build gfimp's for each spin and make them point to self.H[spin].
         # This is a bad hack to avoid creating gfimp.H & gfimp.V since they
         # must point to the same (spin dependent) Hamiltonian and onsite
@@ -168,6 +171,7 @@ class SpinGfimp:
             gfimp.beta = beta
             gfimp.tol_fit = tol_fit
             gfimp.max_fit = max_fit
+            gfimp.alpha = alpha
             gfimp.H = self.H[s]
             gfimp.V = self.V
             self.gfimp[s] = gfimp
@@ -364,7 +368,7 @@ class DMFT:
             return : the error w.r.t. the previous iteration
     """
     
-    def __init__(self, gfimp, gfloc, occupancy_goal=None, max_iter=20, tol=1e-3, adjust_mu=False):
+    def __init__(self, gfimp, gfloc, occupancy_goal=None, max_iter=20, tol=1e-3, adjust_mu=False, alpha=0.):
         self.gfimp = gfimp
         self.gfloc = gfloc
         self.occupancy_goal = occupancy_goal
@@ -375,6 +379,7 @@ class DMFT:
         self.z = 1.j*wn
         self.delta = None
         self.adjust_mu = adjust_mu
+        self.weights = wn**-alpha
 
     def initialize(self, U, Sigma):
         mu = U/2.
@@ -399,7 +404,7 @@ class DMFT:
         return np.sum(occp), delta_new
 
     def distance(self, delta):
-        eps = self(delta) - delta
+        eps = self.weights * (self(delta) - delta)
         return eps
 
     def __call__(self, delta):

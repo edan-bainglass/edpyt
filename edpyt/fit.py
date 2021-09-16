@@ -1,16 +1,16 @@
 #!/usr/bin/env python
-from operator import ne
+from numba.np.ufunc import parallel
 import numpy as np
+from math import sqrt
 
-
-from numba import njit, complex128, prange
+from numba import njit, prange
+from numba.types import complex128, float64, Array
 from numba.experimental import jitclass
 from collections import namedtuple
 
 from edpyt.fmin_bfgs import _minimize_bfgs
-from scipy.optimize import fmin_bfgs
 
-@njit
+@njit#([(Array(float64, 1, 'C'), Array(complex128, 1, 'A'), Array(complex128, 1, 'A'))],parallel=False)
 def hybrid_discrete(p, z, out):
     #                ____ N=nbath           2
     #               \               |p(i+N)|
@@ -18,7 +18,7 @@ def hybrid_discrete(p, z, out):
     #                /              z - p(i)
     #               /____ i=0
     n = p.size//2
-    for i in range(z.size):
+    for i in prange(z.size):
         out[i] = 0.+0.j
         for j in range(n):
             out[i] += p[j+n]**2/(z[i]-p[j])
@@ -53,7 +53,18 @@ spec = [
     ('z',complex128[:]),
     ('out',complex128[:]),
     ('vals_true',complex128[:]),
+    ('weights',float64[:]),
 ]
+
+
+@njit#([(Array(complex128, 1, 'A'), Array(complex128, 1, 'A'), Array(float64, 1, 'A'))],parallel=False)
+def cityblock(a, b, w):
+    out = 0.
+    for i in prange(a.size):
+        c = a[i] - b[i]
+        out += w[i] * (c.real**2 + c.imag**2)
+    return sqrt(out)
+
 
 @jitclass(spec)
 class Chi:
@@ -68,21 +79,25 @@ class Chi:
     #       chi =    \      | Delta   (z) - Delta  (z) |
     #                /            true          fit
     #               /____ z
-    def __init__(self, z, vals_true):
+    def __init__(self, z, vals_true, weights):
         self.z = z
         self.out = np.empty_like(z)
         self.vals_true = vals_true
+        self.weights = weights
     
     def call(self, p):
         hybrid_discrete(p, self.z, self.out)
-        return np.linalg.norm(self.out - self.vals_true)
+        return cityblock(self.out, self.vals_true, self.weights)
     
     def __call__(self, p):
         return self.call(p)
 
 
+chi_type = Chi.class_type.instance_type
+
+
 @njit(parallel=True)
-def _fit_hybrid(vals_true, z, popt):
+def _fit_hybrid(vals_true, z, popt, weights):
     """Parallel fit.
     
     Args:
@@ -94,14 +109,14 @@ def _fit_hybrid(vals_true, z, popt):
     fopt = np.empty(vals_true.shape[0])
     for i in prange(vals_true.shape[0]):
     # for i in range(vals_true.shape[0]):
-        chi = Chi(z, vals_true[i])
+        chi = Chi(z, vals_true[i], weights)
         popt[i], fopt[i] = _minimize_bfgs(chi, popt[i])
         # output = fmin_bfgs(chi, popt[i], full_output=True)
         # popt[i], fopt[i] = output[0], output[1]
     return fopt
     
  
-def fit_hybrid(vals_true, nbath=7, nmats=3000, beta=70., tol_fit=5., max_fit=5):
+def fit_hybrid(vals_true, nbath=7, nmats=3000, beta=70., tol_fit=5., max_fit=5, alpha=0.):
     """Fit hybridization using matsubara frequencies.
 
     Args:
@@ -112,12 +127,15 @@ def fit_hybrid(vals_true, nbath=7, nmats=3000, beta=70., tol_fit=5., max_fit=5):
         tol_fit : tollerance for fit error.
         max_fit : repeat fit optimization if error is greater than `tol_fit`
                   for at max. `max_fit` times. Then return anyway.
+        alpha : weight factor for matzubara frequency, i.e. w^-alpha * |X(z) - Y(z)|.
     """
     squeeze_output = False
     if vals_true.ndim<2:
         squeeze_output = True
     vals_true = np.atleast_2d(vals_true)
-    z = 1.j*(2*np.arange(nmats)+1)*np.pi/beta
+    wn = (2*np.arange(nmats)+1)*(np.pi/beta)
+    z = 1.j*wn
+    weights = wn**-alpha
     shape = vals_true.shape[:-1]
     nfit = np.prod(shape)
     nparams = 2*nbath
@@ -129,10 +147,9 @@ def fit_hybrid(vals_true, nbath=7, nmats=3000, beta=70., tol_fit=5., max_fit=5):
     while np.any(fopt>tol_fit)&(it<max_fit):
         need_fit = np.where(fopt>tol_fit)[0]
         p = generate_random(need_fit.size)
-        fopt[need_fit] = _fit_hybrid(vals_true[need_fit], z, p)
+        fopt[need_fit] = _fit_hybrid(vals_true[need_fit], z, p, weights)
         popt[need_fit] = p[:]
         it += 1
-    vals_true.shape = shape + (nmats,)
     fopt.shape = shape    
     popt.shape = shape + (nparams,)
     if squeeze_output:
@@ -148,12 +165,24 @@ def fit_hybrid(vals_true, nbath=7, nmats=3000, beta=70., tol_fit=5., max_fit=5):
 #         _minimize_bfgs(chi, p0)
 
 if __name__ == '__main__':
+    from matplotlib import pyplot as plt
+    from edpyt.fit_serial import fit_hybrid as fit_hybrid_serial
+    beta = 70.
+    nmats = 3000
     hybrid_true = lambda z: 2*(z-np.sqrt(z**2-1))
-    z = 1.j*(2*np.arange(3000)+1)*np.pi/70.
+    z = 1.j*(2*np.arange(nmats)+1)*np.pi/beta
     vals_true = hybrid_true(z)
-    vals_true = np.tile(vals_true, (4,1))
-    _fit_hybrid(vals_true, z, )
-    run.parallel_diagnostics(level=4)
+    vals_true = np.tile(vals_true, (2,1))
+    popt, fopt = fit_hybrid(vals_true, max_fit=1)
+    vals_serial = fit_hybrid_serial(vals_true, nmats=nmats, beta=beta, 
+                                    full_output=True)[0](z)
+    vals_trial = Delta(popt[0])(z)
+    fig, axs = plt.subplots(1,2)
+    axs[0].plot(z.imag, vals_true[0].imag, z.imag, vals_trial.imag, z.imag, vals_serial.imag)
+    axs[1].plot(z.imag, vals_true[0].real, z.imag, vals_trial.real, z.imag, vals_serial.real)
+    plt.savefig('fit_hybrid.png')
+    plt.close()
+    print(fopt)
 
 
 
