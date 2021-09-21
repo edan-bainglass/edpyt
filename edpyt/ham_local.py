@@ -78,4 +78,7 @@ class Local(np.ndarray):
     """Local Hamiltonian operator."""
     def matvec(self, other, out=None):
         return np.multiply(self, other, out=out)
+    
+    def todense(self):
+        return np.diag(self)
         

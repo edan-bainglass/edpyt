@@ -1,6 +1,11 @@
-from types import MethodType
 import numpy as np
+
+# Subclass for non-local operator
 from scipy.sparse import csr_matrix
+
+# Non-zero elements of sparse matrix lower than calculated.
+from warnings import warn
+from edpyt.ham_hopping import cs_type
 
 from edpyt.shared import unsigned_one as uone
 from edpyt.operators import cdgc
@@ -32,6 +37,7 @@ def nnz_csrmat(A, nnz):
                 count += 1
         sp_A.indptr[i+1] = sp_A.indptr[i] + (count-init_count)
     return sp_A
+    
 
 # @njit((Array(float64, 3, 'A', readonly=True),
 #        Array(float64, 2, 'C'),
@@ -41,22 +47,39 @@ def nnz_csrmat(A, nnz):
 #        boolean,
 #        float64),
 #       parallel=True,cache=True)
-def build_ham_non_local(Jx, Jp, states_up, states_dw):
+def build_ham_non_local(Jx, Jp, states_up, states_dw, vec_diag):
+    """
+        Jx : direct (spin) exchange.
+        Jp : pair (simultaneous) hopping of two electrons.
+        Jh : coulomb assistend hopping.
     
+    """
+    #        __                      
+    #       \              +   +                      +   +                     +                       
+    #                 J   c   c    c     c     + J   c   c    c     c    +  J  c   c    ( n     + n   ) 
+    #       /__        x    is  js'  is'  js      p    is  i-s  j-s  js      h   is  js     is'     js' 
+    #       i!=j,
+    #        ss'       
     dup = states_up.size
     dwn = states_dw.size
     n = Jx.shape[0]
     
-    nup = count_bits(states_up[0],n)
-    ndw = count_bits(states_dw[0],n)
+    Nup = count_bits(states_up[0],n)
+    Ndw = count_bits(states_dw[0],n)
     
-    nnz_offdiag = count_nnz_offdiag(Jx)
-    nnz = np.count_nonzero(Jp)
-    nnz_sp_count = (nnz_offdiag+nnz) * int(binom(n-2, nup-1)) * int(binom(n-2, ndw-1))
-    sp_mat = empty_csrmat(nnz_sp_count, (dwn*dup, dwn*dup))
+    nnz_x = count_nnz_offdiag(Jx)
+    nnz_p = count_nnz_offdiag(Jp)
+    nnz = (nnz_x + nnz_p) * int(binom(n-2, Nup-1)) * int(binom(n-2, Ndw-1))
+        
+    sp_mat = empty_csrmat(nnz, (dwn*dup, dwn*dup))
     
-    Jx = nnz_offdiag_csrmat(Jx, nnz_offdiag)
-    Jp = nnz_csrmat(Jp, nnz)
+    if np.any(Jx.diagonal()):
+        warn('Neglecting off-diagonal exchange couplings.')
+    if np.any(Jp.diagonal()):
+        warn('Neglecting off-diagonal pair hopping couplings.')
+    
+    Jx = nnz_offdiag_csrmat(Jx, nnz_x)
+    Jp = nnz_offdiag_csrmat(Jp, nnz_p)
     
     count = 0
     for idw in range(dwn):
@@ -71,12 +94,16 @@ def build_ham_non_local(Jx, Jp, states_up, states_dw):
             sup = states_up[iup]
             for i in range(n):
                 nup[i] = (sup>>i)&uone
-            # Spin-Exchange: Jx [c^+_j,dw c_i,dw] [c^+_i,up c_j,up]
+            # Spin-Exchange: \sum_ij \sum_ss' 0.5 * Jx_ij [c^+_is c^+_js' c_is' c_js]
+            #    s=s'  :: \sum_ij \sum_s - 0.5 * Jx_ij [c^+_is c_is] [c^+_js c_js]
+            #    s!=s' :: \sum_ij - 0.5 * Jx_ij [S+_i S-_j + S+_j + S-_i]
+            #          :: \sum_ij - Jx_ij [S+_i S-_j]
+            tmp = 0.
             for i in range(n):
-                if (~nup[i])&(ndw[i]):
+                if (not nup[i]) & ndw[i]:
                     for p in range(Jx.indptr[i], Jx.indptr[i+1]):
                         j = Jx.indices[p]
-                        if (~ndw[j])&(nup[j])&(i!=j):
+                        if nup[j] & (not ndw[j]):
                             sgn_up, fup = cdgc(sup, i, j)
                             jup = binsearch(states_up, fup)
                             sgn_dw, fdw = cdgc(sdw, j, i)
@@ -85,12 +112,19 @@ def build_ham_non_local(Jx, Jp, states_up, states_dw):
                             sp_mat.data[count] = sgn_up * sgn_dw * Jx.data[p]
                             sp_mat.indices[count] = Jndx                
                             count += 1
-            # Pair-Hopping: Jp [c^+_i,up c^+_i,dw] [c_j,dw c_j,up]
+                for p in range(Jx.indptr[i], Jx.indptr[i+1]):
+                    j = Jx.indices[p]
+                    tmp += Jx.data[p] * (nup[i]*nup[j] + ndw[i]*ndw[j])             
+            tmp *= - 0.5
+            vec_diag[iup+idw*dup] += tmp
+            # Pair-Hopping: \sum_ij \sum_s 0.5 * Jp_ij [c^+_is c^+_i-s c_j-s c_js]
+            #   s'=-s  :: \sum_ij \sum_s 0.5 * Jp_ij [c^+_is c_js] [c^+_i-s c_j-s]
+            #          :: \sum_ij Jp_ij [c^+_is c_js]
             for i in range(n):
-                if (~nup[i])&(~ndw[i]):
+                if (not nup[i]) & (not ndw[i]):
                     for p in range(Jp.indptr[i], Jp.indptr[i+1]):
                         j = Jp.indices[p]
-                        if (ndw[j])&(nup[j]):
+                        if nup[j] & ndw[j]:
                             sgn_up, fup = cdgc(sup, i, j)
                             jup = binsearch(states_up, fup)
                             sgn_dw, fdw = cdgc(sdw, i, j)
@@ -100,6 +134,10 @@ def build_ham_non_local(Jx, Jp, states_up, states_dw):
                             sp_mat.indices[count] = Jndx                
                             count += 1            
             sp_mat.indptr[Indx+1] = sp_mat.indptr[Indx] + (count-init_count)
+    if count!=sp_mat.data.size:
+        warn(f'Number of non-zero elements for sector ({Nup},{Ndw}) lower than calculated.')
+        sp_mat = cs_type(sp_mat.data[:count], sp_mat.indptr, 
+                         sp_mat.indices[:count], sp_mat.shape)
     sp_mat = NonLocal((sp_mat.data, sp_mat.indices, sp_mat.indptr),shape=sp_mat.shape)
     return sp_mat
 

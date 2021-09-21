@@ -1,5 +1,5 @@
 import numpy as np
-from numba import njit, types
+from numba import njit, float64
 
 # Unsigned dtype
 from edpyt.shared import unsigned_one
