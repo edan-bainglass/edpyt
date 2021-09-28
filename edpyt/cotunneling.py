@@ -170,6 +170,7 @@ def build_transition_elements(n, egs, espace, cutoff=None):
           (0,0)]   # add dw remove dw
     ngs = [ns for ns,sct in espace.items() if abs(sct.eigvals.min()-egs)<1e-9]
     reached_by_gs = [(ns[0]+ds[0],ns[1]+ds[1]) for ns in ngs for ds in dS]
+    reached_by_gs = list(filter(lambda ns: all((i>=0)&(i<=n) for i in ns), reached_by_gs))
     # Loop over the sectors reached by the GS sector and compute the
     # projections to sectors that are also reached by the GS. Note that
     # this ensures that the (self) matrix elements bringing to the same sector
@@ -241,9 +242,9 @@ class _Sigma:
 
 class _Sigmae(_Sigma):
     """Electron."""
-    #   |        |  2
-    #   | G  (z) |      
-    #   |  e     |    
+    #  |        | 2
+    #  | G  (z) |   
+    #  |  e     | 
     
     def integrate(self, A, extract, inject, beta, mu):
         return Gamma1(
@@ -258,9 +259,9 @@ class _Sigmae(_Sigma):
 
 class _Sigmah(_Sigma):
     """Hole."""
-    #   |        |  2
-    #   | G  (z) |      
-    #   |  h     |    
+    #  |        | 2
+    #  | G  (z) |   
+    #  |  h     | 
     
     def integrate(self, A, extract, inject, beta, mu):
         return Gamma1(
@@ -305,18 +306,18 @@ class Sigma(_Sigma):
         res = self.gf2e(z, A[inject], A[extract]) + self.gf2h(z, A[extract], A[inject])
         return abs2(res.real, res.imag)
 
-
+# https://journals.aps.org/prb/pdf/10.1103/PhysRevB.74.205438
 def build_rate_matrix(sigmadict, beta, mu, A, approx_integral=False):
     #          ___
     #         |     __                      
     #         |    \     _             _   
     #         |  -      |             |            --  
-    #         |    /__     k1           12
-    #         |        k!=1           __         
+    #         |    /__     k0           01
+    #         |        k!=0           __         
     #  W  =   |        _             \     _       --  
     #         |       |            -      |          
-    #         |         21           /__     k2  
-    #         |                          k!=2
+    #         |         10           /__     k1  
+    #         |                          k!=1
     #         |       :                :          \
     integrate = attrgetter('approximate') if approx_integral else attrgetter('integrate')
     sz, odd = np.divmod(len(sigmadict), 2)
