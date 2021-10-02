@@ -385,7 +385,7 @@ class DMFT:
         mu = U/2.
         self.gfloc.set_local(Sigma)
         self.gfloc.update(mu)
-        self.gfimp.update(mu)
+        self.gfimp.update(mu-self.gfloc.ed)
         return self.gfloc.Delta(self.z)
 
     def initialize_magnetic(self, U, Sigma, sign, field):

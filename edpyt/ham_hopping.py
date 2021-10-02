@@ -165,7 +165,7 @@ class UpHopping(csr_matrix):
         super().__init__(arg1, shape=shape, dtype=dtype, copy=copy)  
         
     def todense(self):
-        return np.kron(np.eye(self.dwn), super().todense())
+        return np.kron(np.eye(self.dwn), np.asarray(super().todense()))
     
     def matvec(self, other, out):
         _psparse.UPmultiply(self, other, out)
@@ -178,7 +178,7 @@ class DwHopping(csr_matrix):
         super().__init__(arg1, shape=shape, dtype=dtype, copy=copy)  
     
     def todense(self):
-        return np.kron(super().todense(), np.eye(self.dup))
+        return np.kron(np.asarray(super().todense()), np.eye(self.dup))
     
     def matvec(self, other, out):
         _psparse.DWmultiply(self, other, out)

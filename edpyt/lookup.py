@@ -27,11 +27,11 @@ def binrep(i, n, format="array"):
 
     str_repr = np.binary_repr(i, n)
     if format in ["string",'str']:
-        return str_repr
+        return str_repr[::-1]
 
     arr_repr = np.fromiter(str_repr,dtype='S1').astype(unsiged_dt)
     if format in ["array","arr"]:
-        return arr_repr#[::-1]
+        return arr_repr[::-1]
 
     else:
         raise ValueError(

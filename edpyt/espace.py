@@ -67,7 +67,7 @@ def _solve_lapack(H, V, states_up, states_dw, k):
     ham = todense(
         *build_mb_ham(H, V, states_up, states_dw)
     )
-    return la.eigh(ham, overwrite_a=True)
+    return np.linalg.eigh(ham)#, overwrite_a=True)
 
 
 def _solve_arpack(H, V, states_up, states_dw, k=6):
