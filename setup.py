@@ -9,7 +9,6 @@ NAME = "edpyt"
 VERSION = "0.1"
 DESCR = "A small template project for exact diagonalization."
 URL = "https://gitlab.ethz.ch/ggandus/edpyt.git"
-REQUIRES = ['numpy', 'cython', 'scipy']
 
 AUTHOR = "Guido Gandus"
 EMAIL = "ggandus@ethz.ch"
@@ -34,8 +33,19 @@ ext_2 = Extension(SRC_DIR + '._continued_fraction',
 
 EXTENSIONS = [ext_1,ext_2]
 
-setup(install_requires=REQUIRES,
-      packages=PACKAGES,
+requires = {
+    "python_requires": ">= " + "3.7",
+    "install_requires": [
+        "setuptools",
+        "cython",
+        "mpmath",
+        "numpy >= " + "1.19",
+        "scipy >= " + "1.6",
+        "numba >= " + "0.51",
+        "ase",
+    ]}
+
+setup(packages=PACKAGES,
       zip_safe=False,
       name=NAME,
       version=VERSION,
@@ -45,5 +55,6 @@ setup(install_requires=REQUIRES,
       url=URL,
       license=LICENSE,
       cmdclass={"build_ext": build_ext},
-      ext_modules=EXTENSIONS
+      ext_modules=EXTENSIONS,
+      **requires
 )
