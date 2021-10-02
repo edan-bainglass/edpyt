@@ -5,6 +5,7 @@
 *.pyc
 *.ipynb
 *.txt
+*.bak
 *.npy
 *.png
 *.log
