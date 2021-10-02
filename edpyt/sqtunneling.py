@@ -22,7 +22,7 @@ def project_add(ispin, n, nupI, ndwI, espace):
     project_exact = project_exact_up if ispin==0 else project_exact_dw
     v_JI = np.empty((sctJ.eigvals.size,sctI.eigvals.size,n))
     for i in range(n):
-        v_JI[...,i] = project_exact(i, cdg, sctI, sctJ)
+        v_JI[...,i] = project_exact(i, n, cdg, sctI, sctJ)
     E = sctJ.eigvals[:,None]-sctI.eigvals[None,:]
     return [Gfe((nupJ,ndwJ,j),(nupI,ndwI,i),v_JI[j,i],E[j,i]) for j,i in np.ndindex(v_JI.shape[:2])]
 
@@ -38,7 +38,7 @@ def project_sub(ispin, n, nupI, ndwI, espace):
     project_exact = project_exact_up if ispin==0 else project_exact_dw
     v_JI = np.empty((sctJ.eigvals.size,sctI.eigvals.size,n))
     for i in range(n):
-        v_JI[...,i] = project_exact(i, c, sctI, sctJ)
+        v_JI[...,i] = project_exact(i, n, c, sctI, sctJ)
     E = -sctJ.eigvals[:,None]+sctI.eigvals[None,:]
     return [Gfh((nupJ,ndwJ,j),(nupI,ndwI,i),v_JI[j,i],E[j,i]) for j,i in np.ndindex(v_JI.shape[:2])]
 

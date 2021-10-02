@@ -10,11 +10,12 @@ from edpyt.operators import (
 import numpy as np
 
 def test_fsgn():
-
-    s = int("1001101",base=2)
-    assert fsgn(s, np.int32(2)) == (-1)**1
-    assert fsgn(s, 3) == (-1)**2
-    assert fsgn(s, 6) == (-1)**3
+    sbin = "1001101"
+    n = len(sbin)
+    s = int(sbin,base=2)
+    assert fsgn(s, np.int32(2), n) == (-1)**2
+    assert fsgn(s, 3, n) == (-1)**1
+    assert fsgn(s, 6, n) == (-1)**0
 
 
 def test_flip():
@@ -25,33 +26,38 @@ def test_flip():
 
 
 def test_fer_algebra():
-
-    s = int("101101",base=2)
+    sbin = "101101"
+    n = len(sbin)
+    s = int(sbin,base=2)
     i = 0
     j = 1
     # {c_i,c^+_j} = c_i c^+_j + c^+_j c_i = \delta_ij
     #
-    tsgn, t = c(s, i)
-    fsgn, f1 = cdg(t, j)
+    tsgn, t = c(s, i, n)
+    fsgn, f1 = cdg(t, j, n)
     sgn1 = tsgn * fsgn
     #
-    tsgn, t = cdg(s, j)
-    fsgn, f2 = c(t, i)
+    tsgn, t = cdg(s, j, n)
+    fsgn, f2 = c(t, i, n)
     sgn2 = tsgn * fsgn
     #
     assert sgn1*f1 + sgn2*f2 == 0
 
 
 def test_cdg():
-    s = int("1001101",base=2)
-    sgn, f = cdg(s, 1)
-    assert sgn==-1
+    sbin = "1001101"
+    n = len(sbin)
+    s = int(sbin,base=2)
+    sgn, f = cdg(s, 1, n)
+    assert sgn==(-1)**3
     assert f==int("1001111",base=2)
 
 def test_c():
-    s = int("1001101",base=2)
-    sgn, f = c(s, 2)
-    assert sgn==-1
+    sbin = "1001101"
+    n = len(sbin)
+    s = int(sbin,base=2)
+    sgn, f = c(s, 2, n)
+    assert sgn==(-1)**2
     assert f==int("1001001",base=2)
 
 

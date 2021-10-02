@@ -39,7 +39,7 @@ class Gf:
         return res / self.Z
 
 
-def project_exact_up(pos, op, sctI, sctJ):
+def project_exact_up(pos, n, op, sctI, sctJ):
     """Project states of sector sctI onto eigenbasis of sector sctJ.
 
     """
@@ -55,14 +55,14 @@ def project_exact_up(pos, op, sctI, sctJ):
         supI = sctI.states.up[iupI]
         # Check for empty impurity
         if check_occupation(supI, pos):
-            sgnJ, supJ = op(supI, pos)
+            sgnJ, supJ = op(supI, pos, n)
             iupJ = binsearch(sctJ.states.up, supJ)
             v0 += np.float64(sgnJ)*sctJ.eigvecs[iupJ::sctJ.dup,:].T.dot(
                                    sctI.eigvecs[iupI::sctI.dup,:])
     return v0
 
 
-def project_exact_dw(pos, op, sctI, sctJ):
+def project_exact_dw(pos, n, op, sctI, sctJ):
     """Project states of sector sctI onto eigenbasis of sector sctJ.
 
     """
@@ -78,7 +78,7 @@ def project_exact_dw(pos, op, sctI, sctJ):
         sdwI = sctI.states.dw[idwI]
         # Check for empty impurity
         if check_occupation(sdwI, pos):
-            sgnJ, sdwJ = op(sdwI, pos)
+            sgnJ, sdwJ = op(sdwI, pos, n)
             idwJ = binsearch(sctJ.states.dw, sdwJ)
             v0 += np.float64(sgnJ)*sctJ.eigvecs[idwJ*sctJ.dup:(idwJ+1)*sctJ.dup,:].T.dot(
                                    sctI.eigvecs[idwI*sctI.dup:(idwI+1)*sctI.dup,:])
@@ -125,7 +125,7 @@ def build_gf_exact(H, V, espace, beta, egs=0., pos=0, ispin=0):
         EI = (sctI.eigvals-egs)[None,:]
         EJ = (sctJ.eigvals-egs)[:,None]
         exponents = np.exp(-beta*EJ) + np.exp(-beta*EI)
-        bJ = project_exact(pos, cdg, sctI, sctJ)
+        bJ = project_exact(pos, n, cdg, sctI, sctJ)
         lambdas.extend((EJ - EI).flatten())
         qs.extend((bJ**2 * exponents).flatten())
 

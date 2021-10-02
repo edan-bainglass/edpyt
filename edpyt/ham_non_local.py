@@ -146,3 +146,6 @@ class NonLocal(csr_matrix):
     """Non local Hamiltonian operator."""    
     def matvec(self, other, out):
         _psparse.Multiply(self, other, out)
+        
+    def todense(self, order=None, out=None):
+        return np.asarray(super().todense(order=order, out=out))

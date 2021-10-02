@@ -15,14 +15,14 @@ def flip(s, pos):
     return s_out
 
 
-@njit(['int64(uint32,int64)',
-       'int32(uint32,int32)'])
-def fsgn(s, pos):
+@njit(['int64(uint32,int64, int64)',
+       'int32(uint32,int32, int64)'])
+def fsgn(s, pos, n):
     """Fermionic sign of state s.
 
     """
     bits = 0
-    for k in range(pos):
+    for k in range(pos+1,n):
         bits += (s>>k)&unsigned_one
     return 1-2*(bits%2)
 
@@ -40,9 +40,9 @@ def get_parity(s, i, j):
     return 1-2*(bits%2)
 
 
-@njit(['Tuple((int64,uint32))(uint32,int64)',
-       'Tuple((int32,uint32))(uint32,int32)'])
-def cdg(s, pos):
+@njit(['Tuple((int64,uint32))(uint32,int64,int64)',
+       'Tuple((int32,uint32))(uint32,int32,int64)'])
+def cdg(s, pos, n):
     """Fermionic creation operator.
 
     Args:
@@ -54,16 +54,16 @@ def cdg(s, pos):
         fermionic sign : (-1)^v (v = sum_{i<pos} 1_i)
     """
     s_out = flip(s, pos)
-    fermionic_sgn = fsgn(s, pos)
+    fermionic_sgn = fsgn(s, pos, n)
 
     assert s_out > s, "c^+ error : c^+|0,...1_pos,>"
 
     return fermionic_sgn, s_out
 
 
-@njit(['Tuple((int64,uint32))(uint32,int64)',
-       'Tuple((int32,uint32))(uint32,int32)'])
-def c(s, pos):
+@njit(['Tuple((int64,uint32))(uint32,int64,int64)',
+       'Tuple((int32,uint32))(uint32,int32,int64)'])
+def c(s, pos, n):
     """Fermionic annihilation operator.
 
     Args:
@@ -75,7 +75,7 @@ def c(s, pos):
         fermionic sign : (-1)^v (v occupied states to the left of pos)
     """
     s_out = flip(s, pos)
-    fermionic_sgn = fsgn(s, pos)
+    fermionic_sgn = fsgn(s, pos, n)
 
     assert s_out < s, "c error : c|0,...0_pos,>"
 
