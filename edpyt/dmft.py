@@ -33,9 +33,24 @@ class FailedToConverge(Exception):
 class Gfimp:
     """Green's function of SIAM model.
 
+    Args:
+        nmats : # of matzubara frequencies used to fit the hybridization.
+        U : impurity local interaction.
+        beta : 1/kBT
+        neig : # of eigenvaleus to solve per sector. Defaults to None (solve all)
+        tol_fit : max. error above which the fit is repeated.
+        max_fit : max. fit repetions.
+        alpha : weigth matzubara frequencies.
     """
-
-    def __init__(self, n, nmats=3000, U=3., beta=1e6, neig=None, tol_fit=10., max_fit=3, alpha=0.):
+    # Matrix form
+    #
+    #   | -mu  v0 v1 . . |
+    #   |  v0  e0        |
+    #   |  v1     e1     |    
+    #   |   .        .   |    
+    #   |   .          . |
+    def __init__(self, n, nmats=3000, U=3., beta=1e6, neig=None, 
+                 tol_fit=10., max_fit=3, alpha=0., adjust_neig=False):
         self.n = n
         self.nmats = nmats # Used in Matsubara fit. 
         self.beta = beta # Used in Matsubara fit and interacting green's function.
@@ -47,6 +62,7 @@ class Gfimp:
         self.tol_fit = tol_fit
         self.max_fit = max_fit
         self.alpha = alpha # wieght matzubara frequency factor.
+        self.adjust_neig = adjust_neig # adjust # of eigenvalues to solve after each solution.
 
     def fit(self, Delta):
         """Fit hybridization and update bath params."""
@@ -119,7 +135,8 @@ class Gfimp:
         H, V = self.H, self.V
         espace, egs = build_espace(H, V, self.neig)
         screen_espace(espace, egs)
-        adjust_neigsector(espace, self.neig, self.n)
+        if self.adjust_neig:
+            adjust_neigsector(espace, self.neig, self.n)
         self.gf = build_gf_lanczos(H, V, espace, self.beta, egs, repr='sp')
         self.espace = espace
         self.egs = egs
@@ -147,7 +164,8 @@ class SpinGfimp:
     NOTE: Arrays of this class have the general shape = (2, z.size)
     """
 
-    def __init__(self, n, nmats=3000, U=3., beta=1e6, neig=None, tol_fit=10., max_fit=3, alpha=0.):
+    def __init__(self, n, nmats=3000, U=3., beta=1e6, neig=None, 
+                 tol_fit=10., max_fit=3, alpha=0., adjust_neig=False):
         self.nmats = nmats # Used in Matsubara fit. 
         self.beta = beta # Used in Matsubara fit and interacting green's function.
         self.n = n
@@ -160,6 +178,7 @@ class SpinGfimp:
         self.tol_fit = tol_fit
         self.max_fit = max_fit
         self.alpha = alpha
+        self.adjust_neig = adjust_neig
         # Build gfimp's for each spin and make them point to self.H[spin].
         # This is a bad hack to avoid creating gfimp.H & gfimp.V since they
         # must point to the same (spin dependent) Hamiltonian and onsite
@@ -207,7 +226,8 @@ class SpinGfimp:
         H, V = self.H, self.V
         espace, egs = build_espace(H, V, self.neig)
         screen_espace(espace, egs)
-        adjust_neigsector(espace, self.neig, self.n)
+        if self.adjust_neig:
+            adjust_neigsector(espace, self.neig, self.n)
         for s, gfimp in enumerate(self):
             gfimp.gf = build_gf_lanczos(H, V, espace, self.beta, egs, repr='sp', ispin=s)
         self.espace = espace
@@ -381,15 +401,16 @@ class DMFT:
         self.adjust_mu = adjust_mu
         self.weights = wn**-alpha
 
-    def initialize(self, U, Sigma):
-        mu = U/2.
+    def initialize(self, U, Sigma, mu=None):
+        if mu is None:
+            mu = U/2.
         self.gfloc.set_local(Sigma)
         self.gfloc.update(mu)
         self.gfimp.update(mu-self.gfloc.ed)
         return self.gfloc.Delta(self.z)
 
-    def initialize_magnetic(self, U, Sigma, sign, field):
-        delta = self.initialize(U, Sigma)
+    def initialize_magnetic(self, U, Sigma, sign, field, mu=None):
+        delta = self.initialize(U, Sigma, mu)
         dmft_step_magnetic(delta, self.gfimp, self.gfloc, sign, field)
         return self.gfloc.Delta(self.z)
 

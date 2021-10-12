@@ -118,6 +118,10 @@ def build_espace(H, V, neig_sector=None):
             states_dw = generate_states(n, ndw)
             # Diagonalize sector
             eigvals, eigvecs = solve_sector(H, V, states_up, states_dw, neig_sector[isct])
+            if eigvals.size==0:
+                from warnings import warn
+                warn(f'Zero-size eigenvalues for sector ({nup}, {ndw}).')
+                continue
             espace[(nup,ndw)] = Sector(
                 States(states_up, states_dw),
                 states_up.size*states_dw.size,
