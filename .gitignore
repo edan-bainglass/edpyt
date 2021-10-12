@@ -11,4 +11,5 @@
 *.log
 ipynbs
 .vscode
+edpyt.egg-info/
 __pycache__

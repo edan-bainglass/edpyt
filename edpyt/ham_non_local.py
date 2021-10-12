@@ -109,7 +109,7 @@ def build_ham_non_local(Jx, Jp, states_up, states_dw, vec_diag):
                             sgn_dw, fdw = cdgc(sdw, j, i)
                             jdw = binsearch(states_dw, fdw)
                             Jndx = jdw * dup + jup
-                            sp_mat.data[count] = sgn_up * sgn_dw * Jx.data[p]
+                            sp_mat.data[count] = - sgn_up * sgn_dw * Jx.data[p]
                             sp_mat.indices[count] = Jndx                
                             count += 1
                 for p in range(Jx.indptr[i], Jx.indptr[i+1]):

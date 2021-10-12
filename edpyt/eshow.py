@@ -27,11 +27,17 @@ def eprint(espace, n):
 
         return states
 
+    estates = []
     for ns, sct in espace.items():
         sates = fockstates(sct)
-        evecs = '\n'.join([' + '.join([v+s for v, s in zip(evec.round(3).astype(str), sates)])
-                          for evec in sct.eigvecs.T])
-        print(ns,sct.eigvals.reshape(-1,1),evecs,sep='\n',end='\n\n')        
+        evecs = [' + '.join([v+s for v, s in zip(evec.round(3).astype(str), sates)])
+                for evec in sct.eigvecs.T]
+        estates.extend([(ns,e,v) for e,v in zip(sct.eigvals, evecs)])
+    estates = sorted(estates, key=lambda estate: estate[1]) # sort by enrgy
+    for ns, e, v in estates:
+        print(f'{ns}: {e:.3E}', v, sep='\n', end='\n\n')
+    # print(*estates,sep='\n')        
+        # print(ns,sct.eigvals.reshape(-1,1),evecs,sep='\n',end='\n\n')        
 
 def fock(sup, sdw, n):
     """Represent fock state.
