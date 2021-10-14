@@ -114,9 +114,44 @@ def _fit_hybrid(vals_true, z, popt, weights):
         # output = fmin_bfgs(chi, popt[i], full_output=True)
         # popt[i], fopt[i] = output[0], output[1]
     return fopt
+
+
+@njit('(float64[:],float64)', cache=True)
+def set_initial_bath(p, bandwidth=2.):
+    """
+    Args:
+        nbath : # of bath sites.
+        bandwidth : half-bandwidth for the bath initialization.
+    """
+    nbath = p.size//2
+    ek = p[:nbath]
+    vk = p[nbath:]
+    # Hoppings
+    vk[:] = max(0.1, 1/np.sqrt(nbath))
+    # Energies
+    # ODD  : [-2,-1,0,+1,+2]
+    # EVEN : [-2,-1,-0.1,0.1,+1,+2]
+    ek[0] = -bandwidth
+    ek[-1] = bandwidth
+    nhalf = nbath//2
+    nbath_is_odd = bool(nbath&1)
+    nbath_is_even = not nbath_is_odd
+    if nbath_is_even and nbath>=4:
+        de = bandwidth/max(nhalf-1,1)
+        ek[nhalf-1] = -0.1    
+        ek[nhalf] = 0.1    
+        for i in range(1,nhalf-1):
+            ek[i] = -bandwidth + i*de
+            ek[nbath-i-1] = bandwidth - i*de
+    if nbath_is_odd and nbath>=3:
+        de = bandwidth/nhalf
+        ek[nhalf] = 0.
+        for i in range(1,nhalf):
+            ek[i] = -bandwidth + i*de
+            ek[nbath-i-1] = bandwidth - i*de
     
- 
-def fit_hybrid(vals_true, nbath=7, nmats=3000, beta=70., tol_fit=5., max_fit=5, alpha=0.):
+    
+def fit_hybrid(vals_true, nbath=7, nmats=3000, beta=70., tol_fit=5., max_fit=5, alpha=0., bandwidth=2.):
     """Fit hybridization using matsubara frequencies.
 
     Args:
@@ -139,17 +174,20 @@ def fit_hybrid(vals_true, nbath=7, nmats=3000, beta=70., tol_fit=5., max_fit=5, 
     shape = vals_true.shape[:-1]
     nfit = np.prod(shape)
     nparams = 2*nbath
-    generate_random = lambda n: (2*np.random.random(n*nparams)-1).reshape(n,nparams)
+    # generate_random = lambda n: (2*np.random.random(n*nparams)-1).reshape(n,nparams)
     vals_true = vals_true.reshape(nfit, nmats)
     popt = np.empty((nfit, nparams))
     fopt = np.ones(nfit) + tol_fit
     it = 0
-    while np.any(fopt>tol_fit)&(it<max_fit):
-        need_fit = np.where(fopt>tol_fit)[0]
-        p = generate_random(need_fit.size)
-        fopt[need_fit] = _fit_hybrid(vals_true[need_fit], z, p, weights)
-        popt[need_fit] = p[:]
-        it += 1
+    # while np.any(fopt>tol_fit)&(it<max_fit):
+    need_fit = np.where(fopt>tol_fit)[0]
+    # p = generate_random(need_fit.size)
+    set_initial_bath(popt[0], bandwidth)
+    for i in range(1,nfit):
+        popt[i] = popt[0]
+    fopt[need_fit] = _fit_hybrid(vals_true[need_fit], z, popt, weights)
+    # popt[need_fit] = p[:]
+    it += 1
     fopt.shape = shape    
     popt.shape = shape + (nparams,)
     if squeeze_output:
