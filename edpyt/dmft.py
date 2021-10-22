@@ -4,7 +4,9 @@ import numpy as np
 from scipy.optimize import root_scalar, broyden1
 
 from edpyt.integrate_gf import integrate_gf
-from edpyt.fit import fit_hybrid, Delta
+from edpyt.fit import Delta
+from edpyt.fit_cg import fit_hybrid
+# from edpyt_backend.fit_wrap import fit_hybrid
 from edpyt.espace import adjust_neigsector, build_espace, screen_espace
 from edpyt.gf_lanczos import build_gf_lanczos
 
@@ -64,23 +66,20 @@ class Gfimp:
         self.alpha = alpha # wieght matzubara frequency factor.
         self.adjust_neig = adjust_neig # adjust # of eigenvalues to solve after each solution.
 
-    def fit(self, Delta):
+    def fit(self, delta):
         """Fit hybridization and update bath params."""
         #                __ n-1           2  
         #           !    \               Vk  
         # Delta(z)  =                 -------
         #                /__k = 0      z - ek
-        
-        popt, fopt = fit_hybrid(Delta, self.n-1, self.nmats, 
-                                self.beta, self.tol_fit, 
-                                self.max_fit, self.alpha)
-        self.set_bath(popt, fopt)
+        x = fit_hybrid(self.n-1, self.nmats, delta, self.beta)
+        self.set_bath(x)
     
-    def set_bath(self, popt, fopt):
+    def set_bath(self, x, fopt=0.):
         """Update with fitted bath parametrization."""
         if fopt>self.tol_fit:
             warn(f"""Fit optimization {fopt} worse than tollerance {self.tol_fit}.""")
-        self.Delta = Delta(popt) #Delta_disc
+        self.Delta = Delta(x) #Delta_disc
         self.H[1:,0] = self.H[0,1:] = self.vk
         self.H.flat[(self.n+1)::(self.n+1)] = self.ek
         
@@ -199,9 +198,9 @@ class SpinGfimp:
     def mu(self):
         return -self.H[0,0,0]
 
-    def set_bath(self, popt, fopt):
+    def fit(self, delta):
         for i, gfimp in enumerate(self):
-            gfimp.set_bath(popt[i],fopt[i])
+            gfimp.fit(delta[i])
 
     def update(self, mu):
         self.H[:,0,0] = -mu
