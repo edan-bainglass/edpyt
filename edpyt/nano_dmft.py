@@ -1,4 +1,3 @@
-from edpyt.fit import fit_hybrid
 import numpy as np
 
 from edpyt.integrate_gf import integrate_gf
