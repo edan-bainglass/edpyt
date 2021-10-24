@@ -1,5 +1,6 @@
 #ifndef _NR_UTILS_H_
 #define _NR_UTILS_H_
+#include <complex.h>
 
 static double sqrarg;
 #define SQR(a) ((sqrarg=(a)) == 0.0 ? 0.0 : sqrarg*sqrarg)
@@ -43,6 +44,9 @@ static int iminarg1,iminarg2;
 
 void nrerror(char error_text[]);
 double *vector(long n);
+double complex* cvector(long n);
+double complex **cmatrix(long m, long n);
 void free_vector(double *v, long n);
+void free_cmatrix(double complex **v, long m);
 
 #endif /* _NR_UTILS_H_ */

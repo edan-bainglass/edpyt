@@ -1,7 +1,8 @@
-#include <stdio.h>
 #include <stddef.h>
+#include <stdio.h>
 #include <stdlib.h>
-#define FREE_ARG char*
+#include "util.h"
+
 
 void nrerror(char error_text[])
 /* Numerical Recipes standard error handler */
@@ -22,8 +23,44 @@ double *vector(long n)
 	return v;
 }
 
+
+double complex *cvector(long n)
+/* allocate a double vector with subscript range v[0..n] */
+{
+	double complex *v;
+
+	v=(double complex*)malloc((size_t) (n*sizeof(double complex)));
+	if (!v) nrerror("allocation failure in vector()");
+	return v;
+}
+
+
+double complex **cmatrix(long m, long n)
+/* allocate a double vector with subscript range v[0..n] */
+{
+	double complex **v;
+
+	v = (double complex**)malloc((size_t) (m*sizeof(double complex*)));
+    for (int i=0; i<m; i++) {
+        v[i] = (double complex*)malloc((size_t) (n*sizeof(double complex)));
+	}
+	if (!v) nrerror("allocation failure in vector()");
+	return v;
+}
+
+
 void free_vector(double *v, long n)
 /* free a double vector allocated with vector() */
 {
-	free((FREE_ARG) (v));
+	free((char*) (v));
+}
+
+
+void free_cmatrix(double complex **v, long m)
+/* free a double vector allocated with vector() */
+{
+	for (int i=0; i<m; i++) {
+		free(v[i]);
+	}
+	free(v);
 }

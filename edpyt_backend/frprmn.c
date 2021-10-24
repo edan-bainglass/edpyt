@@ -2,8 +2,8 @@
 #include <math.h>
 #include "header.h"
 #include "util.h"
-#define ITMAX 200
-#define EPS 1.0e-10
+#define ITMAX 2000
+#define EPS 2.0e-4
 #define FREEALL free_vector(xi,n);free_vector(h,n);free_vector(g,n);
 
 
@@ -31,11 +31,12 @@ void frprmn(double p[], int n, double ftol, int *iter, double *fret,
         g[j] = -xi[j];
         xi[j]=h[j]=g[j];
     }
-    ftol=1.0e-10;
+    ftol=1.0e-5;
     for (its=1;its<=ITMAX;its++) {
         *iter=its;
         dlinmin(p,xi,n,fret,func,dfunc);
         if (2.0*fabs(*fret-fp) <= ftol*(fabs(*fret)+fabs(fp)+EPS)) {
+            printf("%.10f %.10f\n", *fret, ftol);
             FREEALL
             return;
         }

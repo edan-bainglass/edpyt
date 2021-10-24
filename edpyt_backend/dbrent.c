@@ -1,7 +1,7 @@
 #include <math.h>
 #include "header.h"
 #include "util.h"
-#define ITMAX 100
+#define ITMAX 2000
 #define ZEPS 1.0e-10
 #define MOV3(a,b,c,d,e,f) (a)=(d);(b)=(e);(c)=(f);
 
@@ -33,7 +33,7 @@ double dbrent(double ax, double bx, double cx, double(*f)(double),
 			if (dv != dx) d2 = (v - x)*dx / (dx - dv);
 			u1 = x + d1;
 			u2 = x + d2;
-			ok1 = (a - u1 - b) > 0.0 && dx*d1 <= 0.0;
+			ok1 = (a - u1)*(u1 - b) > 0.0 && dx*d1 <= 0.0;
 			ok2 = (a - u2)*(u2 - b) > 0.0 && dx*d2 <= 0.0;
 			olde = e;
 			e = d;

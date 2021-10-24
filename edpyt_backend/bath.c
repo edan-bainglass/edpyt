@@ -1,8 +1,18 @@
+#include <stdio.h>
 #include "bath.h"
+#include "util.h"
 
 extern int nbath, nmats;
-extern double beta;
+// extern double beta;
 extern double complex* vals_true;
+extern double complex* delta;
+extern double complex* z;
+extern double complex** ddelta;
+
+
+extern void dgemv_(char* trans, int* m, int* n, double* alpha, double* A,
+            int* lda, double* x, int* incx, double* beta, double* y, int* incy);
+
 
 double BANDWIDTH = 2.0;
 
@@ -40,50 +50,71 @@ void init_bath(double x[]) {
     }
 }
 
-double delta_chi2(double x[]) {
+
+void eval_delta(double x[]) {
     int i, j;
-    double complex zi, val;    
-    double cdst;
-    // Return value
-    double fx = 0.;
-    for (i=0; i<nmats; i++) {
-        val = 0.;
-        zi = (2*i+1) * PI/beta * I;
-        for (j=0; j<nbath; j++) {
-            val += pow(x[j+nbath],2) / (zi - x[j]);
-        }
-        cdst = cabs(vals_true[i]-val); //complex distance
-        fx += pow(cdst, 2);
+    double* ek = x;
+    double* vk = x + nbath;
+    double* vk2 = vector(nbath);
+    for (j=0; j<nbath; j++) {
+        vk2[j] = pow(vk[j], 2);
     }
-    fx /= nmats;
-    return fx;
+    for (i=0; i<nmats; i++) {
+        delta[i] = 0.;
+        for (j=0; j<nbath; j++) {
+            delta[i] += vk2[j] / (z[i] - ek[j]);
+        }
+    }
+    free(vk2);
 }
 
 
-void delta_dchi2(double x[], double dx[]) {
-    int i, j, n = 2*nbath;
-    double complex zi, val, denom, dst;    
-    double complex *dfx;
-    dfx = (double  complex*)malloc((size_t) (n*sizeof(double complex)));    
-    // Return value
-    for (j=0; j<n; j++) {
-        dx[j] = 0.;
+void eval_ddelta(double x[]) {
+    int i, j;
+    double* ek = x;
+    double* vk = x + nbath;
+    double* vk2 = vector(nbath);
+    double complex denom;
+    for (j=0; j<nbath; j++) {
+        vk2[j] = pow(vk[j], 2);
     }
     for (i=0; i<nmats; i++) {
-        val = 0.;
-        zi = 2*(i+1) * PI/beta * I;
         for (j=0; j<nbath; j++) {
-            denom = (zi - x[j]);
-            val += pow(x[j+nbath],2) / denom;
-            dfx[j] = pow(x[j+nbath],2) / pow(denom, 2); 
-            dfx[j+nbath] = 2*x[j+nbath] / denom; 
-        }
-        dst = vals_true[i]-val; // complex distance
-        for (j=0; j<n; j++) {
-            dx[j] += creal(dfx[j]) * creal(dst) + cimag(dfx[j]) * cimag(dst);
+            ddelta[i][j] = vk2[j] / cpow(z[i]-ek[j], 2);
+            ddelta[i][j+nbath] = 2. * vk[j] / (z[i]-ek[j]);
         }
     }
-    for (j=0; j<n; j++) {
-        dx[j] *= -2./nmats;
+    free(vk2);
+}
+
+
+double eval_chi2(double x[]) {
+    double chi2 = 0.;
+    eval_delta(x);
+    for (int i=0; i<nmats; i++) {
+        chi2 += pow(cabs(vals_true[i]-delta[i]), 2);
+    }
+    chi2 /= (double)nmats;
+    return chi2;
+}
+
+
+void eval_dchi2(double x[], double dx[]) {
+    double complex F;
+    int n = 2*nbath;
+    int i, k;
+    for (int k=0; k<n; k++) {
+        dx[k] = 0.;
+    }
+    eval_delta(x);
+    eval_ddelta(x);
+    for (int i=0; i<nmats; i++) {
+        F = vals_true[i]-delta[i];
+        for (int k=0; k<n; k++) {
+            dx[k] += creal(ddelta[i][k]) * creal(F) + cimag(ddelta[i][k]) * cimag(F);
+        }
+    }
+    for (int k=0; k<n; k++) {
+        dx[k] = -2.*dx[k]/(double)nmats;
     }
 }
