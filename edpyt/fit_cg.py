@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.optimize import fmin_cg
-from numba import guvectorize
+from numba import guvectorize, njit
+
 
 """Look at DCore github for example codes."""
    
@@ -40,38 +41,50 @@ def DDelta(z, n):
     return inner
 
 
+@njit('float64(complex128[:],complex128[:])')
+def _chi2(x, xt):
+    res = 0.
+    for i in range(x.size):
+        res += ((x[i].real-xt[i].real)**2 + (x[i].imag-xt[i].imag)**2)
+    return res / x.size
+
+
 def Chi2(delta, vals_true):
     def inner(p):
-        return (np.abs(vals_true - delta(p))**2).sum()/vals_true.size
+        return _chi2(vals_true, delta(p))
     return inner
 
 
 def dChi2(delta, ddelta, vals_true):
+    F = np.empty_like(vals_true)
     def inner(p):
-        F = (vals_true - delta(p))[:,None]
+        np.subtract(vals_true, delta(p), out=F)
         dx = ddelta(p)
-        return -2.*(F.real*dx.real + F.imag*dx.imag).sum(0) / vals_true.size
+        return -2. * (F.real.dot(dx.real) + F.imag.dot(dx.imag)) / vals_true.size
     return inner
+ 
 
-
-def fit_hybrid(nbath, nmats, vals_true, beta):
+def fit_hybrid(p, nmats, vals_true, beta):
     z = 1.j*(2*np.arange(nmats)+1)*np.pi/beta
-    p = np.empty(2*nbath)
     delta = Delta(z)
-    ddelta = DDelta(z, 2*nbath)
+    ddelta = DDelta(z, p.size)
     chi2 = Chi2(delta, vals_true)
     dchi2 = dChi2(delta, ddelta, vals_true)
-    _init_bath(p)
-    return fmin_cg(chi2, p, dchi2, disp=False)
+    p[:] = fmin_cg(chi2, p, dchi2, disp=False)
 
 
-def _init_bath(p, bandwidth=2.):
+def get_initial_bath(*, p=None, nbath=None, bandwidth=2.):
     """
     Args:
         nbath : # of bath sites.
         bandwidth : half-bandwidth for the bath initialization.
     """
-    nbath = p.size//2
+    if p is None:
+        p = np.empty(2 * nbath)
+    elif nbath is None:
+        nbath = p.size // 2
+    else:
+        raise ValueError("Must provide either nbath or initial parameters.")
     ek = p[:nbath]
     vk = p[nbath:]
     # Hoppings
@@ -97,8 +110,9 @@ def _init_bath(p, bandwidth=2.):
         for i in range(1,nhalf):
             ek[i] = -bandwidth + i*de
             ek[nbath-i-1] = bandwidth - i*de
-            
-            
+    return p    
+
+   
 if __name__ == '__main__':
     from matplotlib import pyplot as plt
     import logging
@@ -107,11 +121,13 @@ if __name__ == '__main__':
     z = 1.j*(2*np.arange(3000)+1)*np.pi/70.
     f = 2*(z-np.sqrt(z**2-1))
     # Init
-    x = fit_hybrid(8, 3000, f, 70.)
+    x = get_initial_bath(nbath=8)
+    fit_hybrid(x, 3000, f, 70.)
     # Timing
     start = time.perf_counter()
     for _ in range(10):
-        x = fit_hybrid(8, 3000, f, 70.)
+        x = get_initial_bath(nbath=8)
+        fit_hybrid(x, 3000, f, 70.)
     elapsed = time.perf_counter() - start
     logging.info(f"Function took : {elapsed}")
     # Testing
