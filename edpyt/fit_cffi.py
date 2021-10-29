@@ -2,7 +2,8 @@ from edpyt_backend._fit import lib, ffi
 
 _cfit = lib.fit
 
-def fit_hybrid(x, nbath, nmats, delta, beta):
+def fit_hybrid(x, nmats, delta, beta):
+    nbath = x.size//2
     it = ffi.new('int*')
     fret = ffi.new('double* ')
     x_ptr = ffi.cast('double*', x.ctypes.data)

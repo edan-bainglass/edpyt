@@ -25,7 +25,7 @@ void fit(double x[], int *iter, double *fret, int _nbath,
         z[i] = (2*i+1) * PI/beta *I;
     }
 
-    init_bath(x);
+    // init_bath(x);
     frprmn(x, n, ftol, iter, fret, eval_chi2, eval_dchi2);
 
     free(z);

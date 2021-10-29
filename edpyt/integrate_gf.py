@@ -99,6 +99,15 @@ def integrate_gf(gf, mu=0, T=300, nzp=100, R=1e10):
     return rho/2.
 
 
-def matsubara_sum(gf, nmats=100, beta=10.):
-    wn = (2*np.arange(nmats)+1)*np.pi/beta
+def matsum_gf(gf, nmats=100, beta=10.):
+    zp, Rp = zero_fermi(nmats)
+    a_p = 1j*zp/beta # poles
+    # gf @ poles.
+    gf_p = gf(a_p)
+    if gf_p.ndim<2:
+        gf_p = gf_p[None,:]
+    mu_0 = a_p[-1] * gf_p[:,-1]
+    mu_1 = -4.j/beta * (gf_p * Rp).sum(-1) # sum over matsubara.
+    rho = np.real(mu_0) + np.imag(mu_1)
+    return rho/2.
     
