@@ -44,7 +44,7 @@ def build_mb_ham(H, V, states_up, states_dw, comm=None):
         U = V
         Jx = None
         Jp = None
-    elif isinstance(V, (dict)):
+    elif isinstance(V, dict):
         U = V.get('U',None)
         Jx = V.get('Jx', None)
         Jp = V.get('Jp', None)

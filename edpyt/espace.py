@@ -52,7 +52,7 @@ def solve_sector(H, V, states_up, states_dw, k=None):
     """
     d = states_up.size*states_dw.size
     if k is None: k = d
-    if (k == d) or (d <= 10):
+    if (k == d) or (d <= 512):
         eigvals, eigvecs = _solve_lapack(H, V, states_up, states_dw, k)
         if k<d: eigvals, eigvecs = eigvals[:k], eigvecs[:,:k]
     else:
@@ -81,10 +81,13 @@ def _solve_arpack(H, V, states_up, states_dw, k=6):
     # return sla.eigsh(matvec, k, which='SA')
 
 
-def get_espace_dim(n):
+def get_espace_dim(n, neig_max=None):
     neig_sector = np.zeros((n+1)*(n+1),int)
     for nup, ndw in np.ndindex(n+1,n+1):
         neig_sector[get_sector_index(n,nup,ndw)] = get_sector_dim(n,nup,ndw)
+    if neig_max:
+        # clip to max. # of eigenvalues.
+        neig_sector = np.where(neig_sector <= neig_max, neig_sector, neig_max)
     return neig_sector
 
 

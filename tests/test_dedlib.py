@@ -1,9 +1,11 @@
+from collections import namedtuple
 import numpy as np
 
 from edpyt.dedlib import (
     RandomSampler,
     Gf0,
     Gfimp,
+    build_moam,
     build_siam, get_evecs_occupation,
     get_occupation,
 )
@@ -39,7 +41,8 @@ def test_dedlib():
     np.testing.assert_allclose(gf0(energies), gfimp(energies))
 
     # Test occupation
-    build_siam(H, V, 0., gfimp)
+    build_siam(H, gfimp)
+    V[0,0] = 0.
     neig = np.ones((n+1)*(n+1),int)
     espace, egs = build_espace(H, V, neig)
     for (nup, ndw), sct in espace.items():
@@ -60,3 +63,25 @@ def test_dedlib():
     screen_espace(espace, egs, beta=1e4)
     gf = build_gf_lanczos(H, V, espace, 0.)
     np.testing.assert_allclose(gf(energies,0.02),gf0(energies+1.j*0.02))
+
+
+def test_moam():
+    gf = namedtuple('gf',['ek','vk2','e0'])
+    nbath = 2
+    nimp = 3
+    n = (nbath+1)*nimp
+    H = np.zeros((n,n))
+    V = H.copy()
+    ek = np.ones(nbath)
+    vk2 = ek*4.
+    gfimp = [gf(ek+i,vk2**i,i) for i in range(1,nimp+1)]
+    build_moam(H, gfimp)
+    np.testing.assert_allclose(H,  [[ 1., 0., 0.,-2.,-2., 0., 0., 0., 0.],
+                                    [ 0., 2., 0., 0., 0.,-4.,-4., 0., 0.],
+                                    [ 0., 0., 3., 0., 0., 0., 0.,-8.,-8.],
+                                    [-2., 0., 0., 2., 0., 0., 0., 0., 0.],
+                                    [-2., 0., 0., 0., 2., 0., 0., 0., 0.],
+                                    [ 0.,-4., 0., 0., 0., 3., 0., 0., 0.],
+                                    [ 0.,-4., 0., 0., 0., 0., 3., 0., 0.],
+                                    [ 0., 0.,-8., 0., 0., 0., 0., 4., 0.],
+                                    [ 0., 0.,-8., 0., 0., 0., 0., 0., 4.]])
