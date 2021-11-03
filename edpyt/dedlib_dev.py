@@ -14,7 +14,7 @@ from edpyt.gf_lanczos import build_gf_lanczos
 
 kB = physical_constants['Boltzmann constant in eV/K'][0]
 
-from edpyt.espace import (build_espace, screen_espace, adjust_neigsector, 
+from edpyt.espace import (build_espace, get_espace_dim, screen_espace, adjust_neigsector, 
     build_non_interacting_espace)
 from edpyt.gf_exact import build_gf_exact
 from edpyt.operators import check_full
@@ -130,27 +130,46 @@ class Gfimp:
     def __call__(self, z):
         return np.reciprocal(z-self.e0-self.delta(z).sum(1))
 
-
-@njit()
-def get_occupation(vector, states_up, states_dw, pos):
-    """Count particles in eigen-state vector (size=dup x dwn).
+# @njit(cache=True,fastmath=True)
+def get_evecs_occupation(evecs, exps, states_up, states_dw, pos):
+    """Count particles in sector eigen-state vectors (size=dup x dwn).
 
     """
+    #       ___       ___L (#sites)   
+    #       \        \                          - beta (E - egs)
+    #  N =                    < v  | n  | v >  e         i
+    #       /__ i    /__ l=0     il    l    il
     N = 0.
     dup = states_up.size
     dwn = states_dw.size
-    occps = (vector**2).reshape(dwn, dup)
+    if evecs.flags.f_contiguous:
+        evecs = evecs.T
+    occps = (evecs**2).reshape(-1, dwn, dup)
 
     for iup in range(dup):
         sup = states_up[iup]
         if check_full(sup, pos):
-            N += occps[:,iup].sum()
+            N += (exps * occps[:,:,iup].sum(1)).sum()
 
     for idw in range(dwn):
         sdw = states_dw[idw]
         if check_full(sdw, pos):
-            N += occps[idw,:].sum()
+            N += (exps * occps[:,idw,:].sum(1)).sum()
 
+    return N
+
+
+def get_occupation(espace, egs, beta, pos):
+    """Count particles in espace eigen-state vectors (size=dup x dwn).
+
+    """
+    N = 0.; Z = 0.
+    for sct in espace.values():
+        exps = np.exp(-beta*(sct.eigvals-egs))
+        evecs = sct.eigvecs
+        N += get_evecs_occupation(evecs,exps,sct.states.up,sct.states.dw,pos)
+        Z += exps.sum()
+    N /= Z
     return N
 
 
@@ -179,6 +198,14 @@ def _get_entropy_params(espace, egs, beta):
     """Helper functionto compute < H > and Z.
     
     """
+    #       ___
+    #       \         - beta (E - egs) 
+    #  Z =          e          i
+    #       /__ i
+    #           ___
+    #           \                         - beta (E - egs) 
+    #  < H > =         ( E  - egs )  *  e          i
+    #           /__ i     i
     E = 0.; Z = 0. 
     for sct in espace.values():
         eigvals = sct.eigvals - egs
@@ -189,19 +216,18 @@ def _get_entropy_params(espace, egs, beta):
     return E, Z        
 
 
-def build_siam(H, V, U, gfimp):
+def build_siam(H, gfimp):
     """Build single Anderson Impurity model.
 
     """
     vk = np.sqrt(gfimp.vk2)
-    n = H.shape[0]
+    n = H.shape[-1]
     H[1:,0] = H[0,1:] = - vk
     H.flat[(n+1)::(n+1)] = gfimp.ek
     H[0,0] = gfimp.e0
-    V[0,0] = U
 
 
-def siam_solve(dos, z, sigma=None, sigma0=None, n=4, 
+def ded_solve(dos, z, sigma=None, sigma0=None, n=4, 
               N=int(1e3), U=3., beta=1e6, rng=_random):
     """Solve SIAM with DED.
 
@@ -237,39 +263,45 @@ def siam_solve(dos, z, sigma=None, sigma0=None, n=4,
     rs = RandomSampler(dos, [z.real[0],z.real[-1]], n, rng)
     gf0 = Gf0(rs)
     gfimp = Gfimp(n)
-    neig1 = None #np.ones((n+1)*(n+1),int) * 3
-    neig0 = None #np.ones((n+1)*(n+1),int) * 3
+    neig1 = get_espace_dim(n, neig_max=3)
+    neig0 = neig1.copy()
+    Q = 0.
     for _ in range(N):
         found = False
         while not found:
             gf0.sample()
             gfimp.fit(gf0)
-            build_siam(H, V, 0., gfimp)
-            espace, egs = build_espace(H, V, neig0)
-            # screen_espace(espace, egs, beta)
+            V[0,0] = 0. # non-interacting.
+            build_siam(H, gfimp)
+            espace, egs0 = build_espace(H, V, neig0)
+            # screen_espace(espace, egs0, beta)
             # adjust_neigsector(espace, neig0, n)
-            N0, sct = next((k,v) for k,v in espace.items() if abs(v.eigvals[0]-egs)<1e-7)
-            evec = sct.eigvecs[:,0]
-            occp0 = get_occupation(evec,sct.states.up,sct.states.dw,0)
-            V[0,0] = U
+            N0, sct = next((k,v) for k,v in espace.items() if abs(v.eigvals[0]-egs0)<1e-7)
+            # evec = sct.eigvecs[:,0]
+            # occp0 = get_occupation(evec,sct.states.up,sct.states.dw,0)
+            occp0 = get_occupation(espace,egs0,beta,0)
+            V[0,0] = U # interactiong.
             H[0,0] -= sigma0
             espace, egs = build_espace(H, V, neig1)
             # screen_espace(espace, egs, beta)
             # adjust_neigsector(espace, neig1, n)
             N1, sct = next((k,v) for k,v in espace.items() if abs(v.eigvals[0]-egs)<1e-7)
+            # evec = sct.eigvecs[:,0]
             if np.allclose(N1,N0):
-                gf = build_gf_exact(H,V,espace,beta,egs)
-                sigma += np.reciprocal(gf0(z))-np.reciprocal(gf(z.real,z.imag))
-                evec = sct.eigvecs[:,0]
-                occp1 = get_occupation(evec,sct.states.up,sct.states.dw,0)
-                imp_occp0 += occp0
-                imp_occp1 += occp1
-                imp_entropy += get_entropy(gfimp,espace,egs,beta)
                 found = True
-    sigma /= N
-    imp_occp0 /= N
-    imp_occp1 /= N
-    imp_entropy /= (N*kB)
+            # occp1 = get_occupation(evec,sct.states.up,sct.states.dw,0)
+            occp1 = get_occupation(espace,egs,beta,0)
+            qv = np.exp(-beta*abs(espace[N1].eigvals.min()-espace[N0].eigvals.min()))
+            gf = build_gf_exact(H,V,espace,beta,egs)
+            sigma += (np.reciprocal(gf0(z))-np.reciprocal(gf(z.real,z.imag)))*qv
+            imp_occp0 += occp0*qv
+            imp_occp1 += occp1*qv
+            imp_entropy += get_entropy(gfimp,espace,egs,beta)*qv
+            Q += qv
+    sigma /= Q#N
+    imp_occp0 /= Q#N
+    imp_occp1 /= Q#N
+    imp_entropy /= (Q*kB)#(N*kB)
     if return_sigma:
             return sigma, imp_occp0, imp_occp1, imp_entropy
     return imp_occp0, imp_occp1, imp_entropy
@@ -298,7 +330,17 @@ def build_moam(H, gfimp):
         H[i,i] = gf.e0
 
 
-def moam_solve(dos, z, sigma=None, sigma0=None, n=4, 
+
+# All positions, split spin occupations.
+from edpyt.observs import get_occupation as _get_occupation_full
+
+
+def get_occupation_full(espace, egs, beta, n):
+    # Sum spin components.
+    return sum(_get_occupation_full(espace, egs, beta, n))
+
+
+def ded_solve_multi(dos, z, sigma=None, sigma0=None, n=8, 
               N=int(1e3), U=3., beta=1e6, rng=_random):
     """Solve SIAM with DED.
 
@@ -326,21 +368,24 @@ def moam_solve(dos, z, sigma=None, sigma0=None, n=4,
     if sigma is None:
         sigma = np.zeros((nimp,z.size),complex)
         return_sigma = True
-    if sigma0 is None: sigma0 = U/2. # chemical potential
-    imp_occp0 = np.zeros(nimp)       # non-interacting impurity occupation
-    imp_occp1 = np.zeros(nimp)       # interacting impurity occupation
-    # imp_entropy = 0.                 # impurity entropy
+    else:
+        sigma[:] = 0.
+    if sigma0 is None: 
+        sigma0 = U/2. # chemical potential
+    imp_occp0 = np.zeros(nimp)                   # non-interacting impurity occupation
+    imp_occp1 = np.zeros(nimp)                   # interacting impurity occupation
+    # imp_entropy = np.zeros(nimp)                 # impurity entropy
     H = np.zeros((n,n))
-    V0 = np.zeros((n,n))             # non-interacting e-e interaction.
-    if isinstance(U, np.ndarray):    # interacting e-e interaction.
-        V1 = V0.copy()              
+    V0 = np.zeros((n,n))
+    if isinstance(U, np.ndarray):
+        V1 = V0.copy()
         V1[:nimp,:nimp] = U
     if isinstance(U, dict):
         V1 = defaultdict(lambda : np.zeros((n,n)))
         for k in U.keys():
             V1[k][:nimp,:nimp] += U[k]
-    nbath = (n-nimp)//nimp          # # of bath sites per impurity.
-    subsystem_pos = np.zeros((nimp,nbath+1),int) # site indices fo each subsytem.
+    nbath = (n-nimp)//nimp
+    subsystem_pos = np.zeros((nimp,nbath+1),int)
     for i in range(nimp):
         bl = i*nbath+nimp
         bh = bl + nbath
@@ -352,55 +397,50 @@ def moam_solve(dos, z, sigma=None, sigma0=None, n=4,
         rs = RandomSampler(dos[i], [z.real[0],z.real[-1]], nbath+1, rng) 
         gf0.append(Gf0(rs))
         gfimp.append(Gfimp(nbath+1))
-    neig1 = None #np.ones((n+1)*(n+1),int) * 3
-    neig0 = None #np.ones((n+1)*(n+1),int) * 3
+    neig1 = get_espace_dim(n, neig_max=3)
+    neig0 = neig1.copy()
+    Q = np.zeros(nimp)
     for _ in range(N):
         found = False
-        while not found:
+        while not found:    
             for i in range(nimp):
                 gf0[i].sample()
                 gfimp[i].fit(gf0[i])
             build_moam(H, gfimp)
+            # Non-interactiong
             espace, egs = build_espace(H, V0, neig0)
-            # screen_espace(espace, egs, beta)
-            # adjust_neigsector(espace, neig0, n)
-            _, sct = next((k,v) for k,v in espace.items() if abs(v.eigvals[0]-egs)<1e-7)
-            evec = sct.eigvecs[:,0]
-            occps = [[get_occupation(evec,sct.states.up,sct.states.dw,i) for i in pos]
-                     for pos in subsystem_pos]
-            N0 = [sum(subsystem_occps) for subsystem_occps in occps]
-            occp0 = [subsystem_occps[0] for subsystem_occps in occps]
+            screen_espace(espace, egs, beta)
+            occps = get_occupation_full(espace, egs, beta, n)
+            N0 = [occps[pos].sum() for pos in subsystem_pos] # Total occupations per subsystem.
+            occp0 = [occps[i] for i in range(nimp)]
+            # Interacting
             H.flat[:nimp*(n+1):n+1] -= sigma0
             espace, egs = build_espace(H, V1, neig1)
-            # adjust_neigsector(espace, neig1, n)
-            _, sct = next((k,v) for k,v in espace.items() if abs(v.eigvals[0]-egs)<1e-7)
-            evec = sct.eigvecs[:,0]
-            occps = [[get_occupation(evec,sct.states.up,sct.states.dw,i) for i in pos]
-                     for pos in subsystem_pos]
-            N1 = [sum(subsystem_occps) for subsystem_occps in occps]
-            occp1 = [subsystem_occps[0] for subsystem_occps in occps]
             screen_espace(espace, egs, beta)
+            occps = get_occupation_full(espace, egs, beta, n)
+            N1 = [occps[pos].sum() for pos in subsystem_pos] # Total occupations per subsystem.
+            occp1 = [occps[i] for i in range(nimp)]
+            # TODO Finite T.
             for i in range(nimp):
-                if np.allclose(N1[i],N0[i]):
-                    try:
-                        gf = build_gf_lanczos(H,V1,espace,beta,egs,pos=i)
-                        sigma[i] += np.reciprocal(gf0[i](z))-np.reciprocal(gf(z.real,z.imag))
-                        imp_occp0[i] += occp0[i]
-                        imp_occp1[i] += occp1[i]
-                        # imp_entropy += get_entropy(gfimp,espace,egs,beta)
-                        found = True
-                    except:
-                        print([(ns,sct.eigvals) for ns,sct in espace.items()])
-                    finally:
-                        found = True
-    sigma /= N
-    imp_occp0 /= N
-    imp_occp1 /= N
-    # imp_entropy /= (N*kB)
-    imp_entropy = 0. #(N*kB)
+                # Check constrain for subsystem.
+                if abs(N0[i]-N1[i])>1e-7:
+                    continue
+                found = True
+                gf = build_gf_lanczos(H,V1,espace,beta,egs,pos=i)
+                sigma[i] += np.reciprocal(gf0[i](z))-np.reciprocal(gf(z.real,z.imag))
+                imp_occp0[i] += occp0[i]
+                imp_occp1[i] += occp1[i]
+                Q[i] += 1
+                # TODO :: Entropy
+    # except zero-division error (0./1.=0. impurity is not accounted for).
+    Q = np.where(Q > 0, Q, 1)
+    sigma /= Q[:,None]#N
+    imp_occp0 /= Q#N
+    imp_occp1 /= Q#N
+    # imp_entropy /= (Q*kB)#(N*kB)
     if return_sigma:
-            return sigma, imp_occp0, imp_occp1, imp_entropy
-    return imp_occp0, imp_occp1, imp_entropy
+            return sigma, imp_occp0, imp_occp1 #, imp_entropy
+    return imp_occp0, imp_occp1# , imp_entropy
 
 
 def smooth(energies, sigma, cutoff=2):
