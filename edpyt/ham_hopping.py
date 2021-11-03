@@ -136,23 +136,29 @@ def build_ham_hopping(H, states_up, states_dw):
             # Many-Body Hamiltonian
             sp_mat_up)
 
+
     # Hoppings DW
-    nnz_offdiag = count_nnz_offdiag(H[1])
-    T = nnz_offdiag_csrmat(H[1], nnz_offdiag)
-
-    nnz_dw_count = nnz_offdiag * int(binom(n-2, ndw-1))
-    sp_mat_dw = empty_csrmat(nnz_dw_count, (dwn, dwn))
-
-    count = 0
-    for idw in range(dwn):
-        count = add_hoppings(idw, states_dw,
-            # Hoppings
-            T,
-            # Sequential index in many-body nnz.
-            count,
-            # Many-Body Hamiltonian
-            sp_mat_dw)
+    if nup!=ndw:
         
+        if not np.may_share_memory(H[0], H[1]) and not H.flags.OWNDATA:
+            nnz_offdiag = count_nnz_offdiag(H[1])
+            T = nnz_offdiag_csrmat(H[1], nnz_offdiag)
+            
+        nnz_dw_count = nnz_offdiag * int(binom(n-2, ndw-1))
+        sp_mat_dw = empty_csrmat(nnz_dw_count, (dwn, dwn))
+
+        count = 0
+        for idw in range(dwn):
+            count = add_hoppings(idw, states_dw,
+                # Hoppings
+                T,
+                # Sequential index in many-body nnz.
+                count,
+                # Many-Body Hamiltonian
+                sp_mat_dw)
+    else:
+        sp_mat_dw = sp_mat_up    
+    
     sp_mat_up = UpHopping((sp_mat_up.data, sp_mat_up.indices, sp_mat_up.indptr),dwn,shape=sp_mat_up.shape)
     sp_mat_dw = DwHopping((sp_mat_dw.data, sp_mat_dw.indices, sp_mat_dw.indptr),dup,shape=sp_mat_dw.shape)
     return sp_mat_up, sp_mat_dw
