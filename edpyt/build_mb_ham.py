@@ -64,7 +64,7 @@ def build_mb_ham(H, V, states_up, states_dw, comm=None):
     
     operators.append(build_ham_local(H, U, states_up, states_dw, params['hfmode'], params['mu']))
     operators.extend(build_ham_hopping(H, states_up, states_dw))
-    if (Jx is not None) and (Jp is not None):
+    if (Jx is not None) or (Jp is not None):
         operators.append(build_ham_non_local(Jx, Jp, states_up, states_dw, operators[0]))
 
     H.flags.writeable = True
