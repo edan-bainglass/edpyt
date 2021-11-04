@@ -2,7 +2,7 @@ import numpy as np
 
 from edpyt.build_mb_ham import build_mb_ham
 from edpyt.espace import build_empty_sector, build_from_sector, solve_sector
-from edpyt.lanczos import build_sl_tridiag
+from edpyt.lanczos import ZeroNormInitialVector, build_sl_tridiag
 from edpyt.lookup import binsearch
 from edpyt.matvec_product import matvec_operator
 from edpyt.operators import c, cdg, check_empty, check_full
@@ -201,8 +201,12 @@ def build_gf_lanczos(H, V, espace, beta, egs=0., pos=0, repr='cf', ispin=0, sepa
                 matvec = matvec_operator(
                     *build_mb_ham(H, V, sctJ.states.up, sctJ.states.dw)
                 )
+                
                 for iL in range(sctI.eigvals.size):
-                    aJ, bJ = build_sl_tridiag(matvec, v0[iL])
+                    try:
+                        aJ, bJ = build_sl_tridiag(matvec, v0[iL])
+                    except ZeroNormInitialVector:
+                        continue
                     gfe.add(
                         gf_kernel,
                         *build_gf_coeff(aJ, bJ, sctI.eigvals[iL], exponents[iL])
@@ -237,7 +241,10 @@ def build_gf_lanczos(H, V, espace, beta, egs=0., pos=0, repr='cf', ispin=0, sepa
                     *build_mb_ham(H, V, sctJ.states.up, sctJ.states.dw)
                 )
                 for iL in range(sctI.eigvals.size):
-                    aJ, bJ = build_sl_tridiag(matvec, v0[iL])
+                    try:
+                        aJ, bJ = build_sl_tridiag(matvec, v0[iL])
+                    except ZeroNormInitialVector:
+                        continue
                     gfh.add(
                         gf_kernel,
                         *build_gf_coeff(aJ, bJ, sctI.eigvals[iL], exponents[iL], sign=-1)

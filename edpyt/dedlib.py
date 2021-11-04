@@ -382,17 +382,12 @@ def moam_solve(dos, z, sigma=None, sigma0=None, n=4,
             screen_espace(espace, egs, beta)
             for i in range(nimp):
                 if np.allclose(N1[i],N0[i]):
-                    try:
-                        gf = build_gf_lanczos(H,V1,espace,beta,egs,pos=i)
-                        sigma[i] += np.reciprocal(gf0[i](z))-np.reciprocal(gf(z.real,z.imag))
-                        imp_occp0[i] += occp0[i]
-                        imp_occp1[i] += occp1[i]
-                        # imp_entropy += get_entropy(gfimp,espace,egs,beta)
-                        found = True
-                    except:
-                        print([(ns,sct.eigvals) for ns,sct in espace.items()])
-                    finally:
-                        found = True
+                    gf = build_gf_lanczos(H,V1,espace,beta,egs,pos=i)
+                    sigma[i] += np.reciprocal(gf0[i](z))-np.reciprocal(gf(z.real,z.imag))
+                    imp_occp0[i] += occp0[i]
+                    imp_occp1[i] += occp1[i]
+                    # imp_entropy += get_entropy(gfimp,espace,egs,beta)
+                    found = True
     sigma /= N
     imp_occp0 /= N
     imp_occp1 /= N

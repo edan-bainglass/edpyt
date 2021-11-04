@@ -10,6 +10,10 @@ scal = get_blas_funcs('scal', dtype=np.float64)
 swap = get_blas_funcs('swap', dtype=np.float64)
 
 
+class ZeroNormInitialVector(Exception):
+    pass
+
+
 def sl_step(matvec, comm=None):
     """Simple Lanczos step.    
     
@@ -102,6 +106,8 @@ def build_sl_tridiag(matvec, phi0, maxn=500, delta=1e-15, tol=1e-10, ND=10, comm
         for _ in range(ND):
             a[n], b[n], l, v = lanc_step(v, l)
             if (abs(b[n])<delta) or (n>=(maxn-1)):
+                if n==0:
+                    raise ZeroNormInitialVector("Initial vector has zero norm.")
                 converged = True
                 break
             n += 1
