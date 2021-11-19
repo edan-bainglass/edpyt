@@ -1,16 +1,14 @@
+from warnings import warn
 import numpy as np
-from numba import njit
-from scipy import linalg as la
-# from scipy.sparse import linalg as sla
 from edpyt import eigh_arpack as sla
-from collections import namedtuple, defaultdict
-from dataclasses import make_dataclass
-from dataclasses import replace as build_from_sector
+from collections import namedtuple
+from dataclasses import make_dataclass, field
 from itertools import product
 
 from edpyt.sector import (
     generate_states,
-    get_sector_dim
+    get_sector_dim,
+    binom
 )
 
 from edpyt.build_mb_ham import (
@@ -28,114 +26,147 @@ from edpyt.lookup import (
 )
 
 
-States = namedtuple('States',['up','dw'])
-# Sector = namedtuple('Sector',['states','d','dup','dwn','eigvals','eigvecs'])
-Sector = make_dataclass('Sector',['states','d','dup','dwn','eigvals','eigvecs'])
+SzStates = namedtuple('States',['up','dw'])
+Sector = make_dataclass('Sector', ['states', ('d', int),
+                         ('eigvals', np.ndarray, field(default=None)),
+                         ('eigvecs', np.ndarray, field(default=None))])
 
 
-def build_empty_sector(n, nup, ndw):
-    states_up = generate_states(n, nup)
-    states_dw = generate_states(n, ndw)
-    return Sector(
-        States(states_up, states_dw),
-        states_up.size*states_dw.size,
-        states_up.size,
-        states_dw.size,
-        None,
-        None
-    )
+def build_empty_sector(n, *p):
+    """Build sector.
+    
+    Args:
+        n : # of sites
+        p : # of particles.
+            - integer : total # of electrons.
+            - (nup, ndw) : up & down # of electrons.
+    """
+    if len(p) == 1:
+        states = generate_states(2*n, p[0])
+        d = states.size # Hilbert dimension.
+    else:
+        nup, ndw = p
+        states = SzStates(
+            generate_states(n, nup),        
+            generate_states(n, ndw))
+        d = states.up.size * states.dw.size # Hilbert dimension.        
+    return Sector(states, d)
 
 
-def solve_sector(H, V, states_up, states_dw, k=None):
+def solve_sector(H, V, sct, k=None):
     """Diagonalize sector.
 
     """
-    d = states_up.size*states_dw.size
-    if k is None: k = d
-    if (k == d) or (d <= 512):
-        eigvals, eigvecs = _solve_lapack(H, V, states_up, states_dw, k)
-        if k<d: eigvals, eigvecs = eigvals[:k], eigvecs[:,:k]
+    if k is None: k = sct.d
+    if (k == sct.d) or (sct.d <= 512):
+        eigvals, eigvecs = _solve_lapack(H, V, sct)
+        if k<sct.d: eigvals, eigvecs = eigvals[:k], eigvecs[:,:k]
     else:
-        eigvals, eigvecs = _solve_arpack(H, V, states_up, states_dw, k)
+        eigvals, eigvecs = _solve_arpack(H, V, sct, k)
     return eigvals, eigvecs
 
 
-def _solve_lapack(H, V, states_up, states_dw, k):
+def _solve_lapack(H, V, sct):
     """Diagonalize sector with LAPACK.
 
     """
     ham = todense(
-        *build_mb_ham(H, V, states_up, states_dw)
+        *build_mb_ham(H, V, sct)
     )
-    return np.linalg.eigh(ham)#, overwrite_a=True)
+    return np.linalg.eigh(ham)
 
 
-def _solve_arpack(H, V, states_up, states_dw, k=6):
+def _solve_arpack(H, V, sct, k=6):
     """Diagonalize sector with ARPACK.
 
     """
     matvec = matvec_operator(
-        *build_mb_ham(H, V, states_up, states_dw)
+        *build_mb_ham(H, V, sct)
     )
-    return sla.eigsh(states_up.size*states_dw.size, k, matvec)
-    # return sla.eigsh(matvec, k, which='SA')
+    return sla.eigsh(sct.d, k, matvec)
 
 
-def get_espace_dim(n, neig_max=None):
-    neig_sector = np.zeros((n+1)*(n+1),int)
-    for nup, ndw in np.ndindex(n+1,n+1):
-        neig_sector[get_sector_index(n,nup,ndw)] = get_sector_dim(n,nup,ndw)
+def get_espace_dim(n, neig_max=None, symmetry='sz'):
+    """Get dimensions of sectors."""
+    if symmetry.lower() == 'sz':
+        neig_sector = np.zeros((n+1)*(n+1), int)
+        for nup, ndw in np.ndindex(n+1,n+1):
+            neig_sector[get_sector_index(n,nup,ndw)] = get_sector_dim(n,nup,ndw)
+    
+    elif symmetry.upper() == 'N':
+        neig_sector = np.zeros(2*n+1, int)
+        for ndu in np.ndindex(2*n+1):
+            neig_sector[ndu] = binom(2*n,ndu)
+    
+    else:
+        raise NotImplementedError(f"Symmetry - {symmetry} - non implemented.")
+    
     if neig_max:
         # clip to max. # of eigenvalues.
         neig_sector = np.where(neig_sector <= neig_max, neig_sector, neig_max)
+        
     return neig_sector
 
 
-def build_espace(H, V, neig_sector=None):
-    """Generate full spectrum.
-
-    Args:
-        neig_sector : # of eigen states in each sector.
-
+def _sz_iter_sectors(n):
+    """Iterate over all (sz-)sectors.
     Return:
-        eig_space : list of eigen states ordered by energy.
-
-    Return:
-        eig_space
+        (quantum numbers, states, size).
     """
-    n = H.shape[-1]
-
-    espace = defaultdict(Sector)
-    if neig_sector is None:
-        neig_sector = get_espace_dim(n)
-
-    # Fill in eigen states in eigen space
-    egs = np.inf
     for nup in range(n+1):
         states_up = generate_states(n, nup)
         for ndw in range(n+1):
-            # Sequential index sector.
-            isct = get_sector_index(n,nup,ndw)
-            if neig_sector[isct] == 0:
-                continue
             states_dw = generate_states(n, ndw)
-            # Diagonalize sector
-            eigvals, eigvecs = solve_sector(H, V, states_up, states_dw, neig_sector[isct])
-            if eigvals.size==0:
-                from warnings import warn
-                warn(f'Zero-size eigenvalues for sector ({nup}, {ndw}).')
-                continue
-            espace[(nup,ndw)] = Sector(
-                States(states_up, states_dw),
-                states_up.size*states_dw.size,
-                states_up.size,
-                states_dw.size,
-                eigvals,
-                eigvecs
-            )
+            states = SzStates(states_up, states_dw)
+            d = states_up.size*states_dw.size
+            yield (nup,ndw), Sector(states, d)
 
-            # Update GS energy
-            egs = min(eigvals.min(), egs)
+
+def _N_iter_sectors(n):
+    """Iterate over all (N-)sectors.
+    Return:
+        (quantum number, states, size).
+    """
+    for ndu in range(2*n+1):
+        states = generate_states(2*n, ndu)
+        yield (ndu,), Sector(states, states.size)
+
+
+def build_espace(H, V, neig_sector=None, symmetry='sz'):
+    """Generate and solve all sectors in hilbert space."""
+    n = H.shape[-1]
+    
+    if symmetry.lower() == 'sz':
+        iter_sectors = _sz_iter_sectors
+        get_sector_index = lambda qns: qns[0]*(n+1) + qns[1]
+    
+    elif symmetry.upper() == 'N':
+        iter_sectors = _N_iter_sectors
+        get_sector_index = lambda qns: qns[0]
+    
+    else:
+        raise NotImplementedError(f"Symmetry - {symmetry} - non implemented.")
+    
+    espace = dict()
+    if neig_sector is None:
+        neig_sector = get_espace_dim(n, symmetry=symmetry)
+
+    egs = np.inf
+        
+    for qns, sct in iter_sectors(n):
+        neig = neig_sector[get_sector_index(qns)]
+        if neig == 0:
+            continue
+        # Diagonalize!
+        sct.eigvals, sct.eigvecs = solve_sector(H, V, sct, neig)
+        if sct.eigvals.size==0:
+            warn(f'Zero-size eigenvalues for sector with quantum numbers {qns}.')
+            continue
+        
+        espace[qns] = sct
+
+        # Update GS energy
+        egs = min(sct.eigvals.min(), egs)
 
     return espace, egs
 
@@ -150,31 +181,21 @@ def build_non_interacting_espace(ek):
         espace : non-interacting spectrum
     """
     from edpyt.build_mb_ham import add_onsites
-    espace = defaultdict(Sector)
+    espace = dict()
     egs = np.inf
 
     n = ek.size
     Uk = np.zeros_like(ek)
     ek = np.tile(ek, (2,n))
-    for nup in range(n+1):
-        states_up = generate_states(n, nup)
-        dup = states_up.size
-        for ndw in range(n+1):
-            states_dw = generate_states(n, ndw)
-            dwn = states_dw.size
-            d = dup * dwn
-            eigvals = np.empty(d)
-            add_onsites(ek, Uk, states_up, states_dw, eigvals, 0.)
-            eigvals.sort()
-            espace[(nup,ndw)] = Sector(
-                States(states_up, states_dw),
-                states_up.size*states_dw.size,
-                states_up.size,
-                states_dw.size,
-                eigvals,
-                None
-            )
-            egs = min(eigvals.min(), egs)
+    
+    for qns, sct in _sz_iter_sectors(n):
+        states = sct.states
+        eigvals = np.empty(sct.d)
+        add_onsites(ek, Uk, states.up, states.dw, eigvals, 0.)
+        eigvals.sort()
+        sct.eigvals = eigvals
+        espace[qns] = sct
+        egs = min(eigvals.min(), egs)
     return espace, egs
 
 
@@ -186,7 +207,7 @@ def screen_espace(espace, egs, beta=1e6, cutoff=1e-9):#, neig_sector=None, n=0):
     """
 
     delete = []
-    for (nup, ndw), sct in espace.items():
+    for qns, sct in espace.items():
         diff = np.exp(-beta*(sct.eigvals-egs)) > cutoff
         if diff.any():
             if (sct.eigvecs.ndim<2): 
@@ -196,10 +217,10 @@ def screen_espace(espace, egs, beta=1e6, cutoff=1e-9):#, neig_sector=None, n=0):
             sct.eigvecs = sct.eigvecs[:,keep_idx]
             assert sct.eigvecs.ndim>1
         else:
-            delete.append((nup,ndw))
+            delete.append(qns)
 
-    for k in delete:
-        espace.pop(k)
+    for qns in delete:
+        espace.pop(qns)
 
 
 def adjust_neigsector(espace, neig, n):

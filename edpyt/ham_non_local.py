@@ -1,4 +1,5 @@
 import numpy as np
+from itertools import product, permutations
 
 # Subclass for non-local operator
 from scipy.sparse import csr_matrix
@@ -8,7 +9,7 @@ from warnings import warn
 from edpyt.ham_hopping import cs_type
 
 from edpyt.shared import unsigned_one as uone
-from edpyt.operators import cdgc
+from edpyt.operators import cdgc, c, cdg
 from edpyt.lookup import binsearch, count_bits
 from edpyt.sector import binom
 from edpyt.ham_hopping import (
@@ -51,7 +52,7 @@ def nnz_csrmat(A, nnz):
 #        boolean,
 #        float64),
 #       parallel=True,cache=True)
-def build_ham_non_local(Jx, Jp, states_up, states_dw, vec_diag):
+def _build_ham_non_local(Jx, Jp, states_up, states_dw, vec_diag):
     """
         Jx : direct (spin) exchange.
         Jp : pair (simultaneous) hopping of two electrons.
@@ -64,6 +65,7 @@ def build_ham_non_local(Jx, Jp, states_up, states_dw, vec_diag):
     #       /__        x    is  js'  is'  js      p    is  i-s  j-s  js      h   is  js     is'     js' 
     #       i!=j,
     #        ss'       
+    
     dup = states_up.size
     dwn = states_dw.size
     n = Jx.shape[0]
@@ -122,7 +124,7 @@ def build_ham_non_local(Jx, Jp, states_up, states_dw, vec_diag):
                                 sgn_dw, fdw = cdgc(sdw, j, i)
                                 jdw = binsearch(states_dw, fdw)
                                 Jndx = jdw * dup + jup
-                                sp_mat.data[count] = sgn_up * sgn_dw * Jx.data[p]
+                                sp_mat.data[count] = - sgn_up * sgn_dw * Jx.data[p]
                                 sp_mat.indices[count] = Jndx                
                                 count += 1
                     for p in range(Jx.indptr[i], Jx.indptr[i+1]):
@@ -156,6 +158,97 @@ def build_ham_non_local(Jx, Jp, states_up, states_dw, vec_diag):
         warn(f'Number of non-zero elements for sector ({Nup},{Ndw}) lower than calculated.')
         sp_mat = cs_type(sp_mat.data[:count], sp_mat.indptr, 
                          sp_mat.indices[:count], sp_mat.shape)
+    return sp_mat
+
+
+def _N_build_ham_non_local(Jx, Jp, states, vec_diag):
+    """
+        Jx : direct (spin) exchange.
+        Jp : pair (simultaneous) hopping of two electrons.
+        Jh : coulomb assistend hopping.
+    
+    """
+    #        __                      
+    #       \              +   +                      +   +                     +                       
+    #                 J   c   c    c     c     + J   c   c    c     c    +  J  c   c    ( n     + n   ) 
+    #       /__        x    is  js'  is'  js      p    is  i-s  j-s  js      h   is  js     is'     js' 
+    #       i!=j,
+    #        ss'       
+    
+    d = states.size
+    n = Jx.shape[0]
+    
+    N = count_bits(states[0],2*n)
+    
+    if Jx is None: 
+        nnz_x = 0
+    else:
+        nnz_x = count_nnz_offdiag(Jx)
+        if np.any(Jx.diagonal()): 
+            warn(warn_offdiag.format(interaction='spin-exchange'))
+        Jx = nnz_offdiag_csrmat(Jx, nnz_x)
+        
+    if Jp is None: 
+        nnz_p = 0
+    else:
+        nnz_p = count_nnz_offdiag(Jp)
+        if np.any(Jp.diagonal()):
+            warn(warn_offdiag.format(interaction='pair-hopping'))
+        Jp = nnz_offdiag_csrmat(Jp, nnz_p)
+    
+    # nnz = (nnz_x + nnz_p) * int(binom(2*n-2, N-1))
+    # sp_mat = empty_csrmat(nnz, (d, d))
+    data = []
+    indices = []
+    indptr = [0]
+    
+    count = 0
+    sgn = np.empty(4) # fermionic signs
+    
+    for idu in range(d):
+        s = states[idu]
+        init_count = count
+        if Jx is not None:
+            for i in range(n): # row
+                for p in range(Jx.indptr[i], Jx.indptr[i+1]):
+                    for sigma, gamma in product(range(2), repeat=2):
+                        j = Jx.indices[p] # column
+                        try:
+                            sgn[0], f = c(s,j+sigma*n,2*n)
+                            sgn[1], f = c(f,i+gamma*n,2*n)
+                            sgn[2], f = cdg(f,j+gamma*n,2*n)
+                            sgn[3], f = cdg(f,i+sigma*n,2*n)
+                        except:
+                            continue
+                        data.append(np.prod(sgn) * Jx.data[p] / 2.)
+                        indices.append(binsearch(states, f))                
+                        count += 1
+        if Jp is not None:
+            for i in range(n): # row
+                for p in range(Jp.indptr[i], Jp.indptr[i+1]):
+                    for sigma, gamma in permutations(range(2), r=2):
+                        j = Jp.indices[p] # column
+                        try:
+                            sgn[0], f = c(s,j+sigma*n,2*n)
+                            sgn[1], f = c(f,j+gamma*n,2*n)
+                            sgn[2], f = cdg(f,i+gamma*n,2*n)
+                            sgn[3], f = cdg(f,i+sigma*n,2*n)
+                        except:
+                            continue
+                        data.append(np.prod(sgn) * Jp.data[p] / 2.)
+                        indices.append(binsearch(states, f))       
+                        count += 1            
+        indptr.append(indptr[idu] + (count-init_count))
+    
+    return cs_type(data, indptr, indices, (d,d))
+
+
+def build_ham_non_local(Jx, Jp, sct, vec_diag):
+    """Build non-local Hamiltonian."""
+    if hasattr(sct.states, 'up'):
+        sp_mat = _build_ham_non_local(Jx, Jp, sct.states.up, sct.states.dw, vec_diag)
+    else:
+        sp_mat = _N_build_ham_non_local(Jx, Jp, sct.states, vec_diag)
     sp_mat = NonLocal((sp_mat.data, sp_mat.indices, sp_mat.indptr),shape=sp_mat.shape)
     return sp_mat
 

@@ -1,7 +1,7 @@
 import numpy as np
 
 from edpyt.build_mb_ham import build_mb_ham
-from edpyt.espace import build_empty_sector, build_from_sector, solve_sector
+from edpyt.espace import build_empty_sector, solve_sector
 from edpyt.lanczos import ZeroNormInitialVector, build_sl_tridiag
 from edpyt.lookup import binsearch
 from edpyt.matvec_product import matvec_operator
@@ -67,13 +67,13 @@ def project_up(pos, n, op, sctI, sctJ):
     #                        iL
     v0 = np.zeros((sctI.eigvals.size,sctJ.d))
     check_occupation = check_full if op is c else check_empty # if op is cdg
-    for iupI in range(sctI.dup):
+    for iupI in range(sctI.states.up.size):
         supI = sctI.states.up[iupI]
         # Check for empty impurity
         if check_occupation(supI, pos):
             sgnJ, supJ = op(supI, pos, n)
             iupJ = binsearch(sctJ.states.up, supJ)
-            v0[:,iupJ::sctJ.dup] = np.float64(sgnJ)*sctI.eigvecs[iupI::sctI.dup,:].T
+            v0[:,iupJ::sctJ.states.up.size] = np.float64(sgnJ)*sctI.eigvecs[iupI::sctI.states.up.size,:].T
     return v0
 
 
@@ -83,13 +83,13 @@ def project_dw(pos, n, op, sctI, sctJ):
     """
     v0 = np.zeros((sctI.eigvals.size,sctJ.d))
     check_occupation = check_full if op is c else check_empty # if op is cdg
-    for idwI in range(sctI.dwn):
+    for idwI in range(sctI.states.dw.size):
         sdwI = sctI.states.dw[idwI]
         # Check for empty impurity
         if check_occupation(sdwI, pos):
             sgnJ, sdwJ = op(sdwI, pos, n)
             idwJ = binsearch(sctJ.states.dw, sdwJ)
-            v0[:,idwJ*sctJ.dup:(idwJ+1)*sctJ.dup] = np.float64(sgnJ)*sctI.eigvecs[idwI*sctI.dup:(idwI+1)*sctI.dup,:].T
+            v0[:,idwJ*sctJ.states.up.size:(idwJ+1)*sctJ.states.up.size] = np.float64(sgnJ)*sctI.eigvecs[idwI*sctI.states.up.size:(idwI+1)*sctI.states.up.size,:].T
     return v0
 
 
@@ -181,10 +181,7 @@ def build_gf_lanczos(H, V, espace, beta, egs=0., pos=0, repr='cf', ispin=0, sepa
             sctJ = espace.get((nupJ, ndwJ), None) or build_empty_sector(n, nupJ, ndwJ)
             # solve with LAPACK
             if (sctJ.d <= 10):
-                eigvals, eigvecs = solve_sector(
-                    H, V, sctJ.states.up, sctJ.states.dw
-                )
-                sctJ = build_from_sector(sctJ,eigvals=eigvals,eigvecs=eigvecs)
+                sctJ.eigvals, sctJ.eigvecs = solve_sector(H, V, sctJ)
                 # <J|I>
                 bJ = project_exact(pos, n, cdg, sctI, sctJ)
                 # EJ-EI
@@ -199,9 +196,8 @@ def build_gf_lanczos(H, V, espace, beta, egs=0., pos=0, repr='cf', ispin=0, sepa
                 # <I|J>
                 v0 = project(pos, n, cdg, sctI, sctJ)
                 matvec = matvec_operator(
-                    *build_mb_ham(H, V, sctJ.states.up, sctJ.states.dw)
+                    *build_mb_ham(H, V, sctJ)
                 )
-                
                 for iL in range(sctI.eigvals.size):
                     try:
                         aJ, bJ = build_sl_tridiag(matvec, v0[iL])
@@ -220,10 +216,7 @@ def build_gf_lanczos(H, V, espace, beta, egs=0., pos=0, repr='cf', ispin=0, sepa
             sctJ = espace.get((nupJ, ndwJ), None) or build_empty_sector(n, nupJ, ndwJ)
             # solve with LAPACK
             if (sctJ.d <= 10):
-                eigvals, eigvecs = solve_sector(
-                    H, V, sctJ.states.up, sctJ.states.dw
-                )
-                sctJ = build_from_sector(sctJ,eigvals=eigvals,eigvecs=eigvecs)
+                sctJ.eigvals, sctJ.eigvecs = solve_sector(H, V, sctJ)
                 # <J|I>
                 bJ = project_exact(pos, n, c, sctI, sctJ)
                 # EI-EJ
@@ -238,7 +231,7 @@ def build_gf_lanczos(H, V, espace, beta, egs=0., pos=0, repr='cf', ispin=0, sepa
                 # <I|J>
                 v0 = project(pos, n, c, sctI, sctJ)
                 matvec = matvec_operator(
-                    *build_mb_ham(H, V, sctJ.states.up, sctJ.states.dw)
+                    *build_mb_ham(H, V, sctJ)
                 )
                 for iL in range(sctI.eigvals.size):
                     try:

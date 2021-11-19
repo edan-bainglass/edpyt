@@ -81,7 +81,7 @@ def c(s, pos, n):
 #        boolean,
 #        float64),
 #       parallel=True,cache=True)
-def build_ham_non_local(Jx, Jp, states_up, states_dw, vec_diag):
+def build_ham_non_local(Jx, Jp, states, vec_diag):
     """
         Jx : direct (spin) exchange.
         Jp : pair (simultaneous) hopping of two electrons.

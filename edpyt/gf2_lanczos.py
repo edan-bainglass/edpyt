@@ -86,7 +86,7 @@ def build_gf_offdiag(H, V, espace, beta, ipos, jpos, ispin=0, egs=0., repr='cf',
             #             i,s      i's'
             v0 = project(ipos, n, cdg, sctI, sctJ) + project(jpos, n, cdg, sctI, sctJ)
             matvec = matvec_operator(
-                *build_mb_ham(H, V, sctJ.states.up, sctJ.states.dw)
+                *build_mb_ham(H, V, sctJ)
             )
             for iL in range(sctI.eigvals.size):
                 aJ, bJ = build_sl_tridiag(matvec, v0[iL])
@@ -107,7 +107,7 @@ def build_gf_offdiag(H, V, espace, beta, ipos, jpos, ispin=0, egs=0., repr='cf',
             #             i,s      i's'
             v0 = project(ipos, n, c, sctI, sctJ) + project(jpos, n, c, sctI, sctJ)
             matvec = matvec_operator(
-                *build_mb_ham(H, V, sctJ.states.up, sctJ.states.dw)
+                *build_mb_ham(H, V, sctJ)
             )
             for iL in range(sctI.eigvals.size):
                 aJ, bJ = build_sl_tridiag(matvec, v0[iL])

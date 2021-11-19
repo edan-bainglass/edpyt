@@ -3,6 +3,7 @@ import numpy as np
 from edpyt.build_mb_ham import (
     build_mb_ham
 )
+from edpyt.espace import build_empty_sector
 
 from edpyt.sector import (
     generate_states
@@ -39,9 +40,8 @@ def test_build_mb_ham():
     nup = 1
     ndw = 1
 
-    states_up = generate_states(n, nup)
-    states_dw = generate_states(n, ndw)
-    i_vals, iup_mat, idw_mat = build_mb_ham(H, V, states_up, states_dw)
+    sct = build_empty_sector(n, nup, ndw)
+    i_vals, iup_mat, idw_mat = build_mb_ham(H, V, sct)
 
     dup = iup_mat.shape[0]
     dwn = idw_mat.shape[0]
@@ -92,9 +92,8 @@ def test_build_mb_ham():
     nup = 2
     ndw = 0
 
-    states_up = generate_states(n, nup)
-    states_dw = generate_states(n, ndw)
-    i_vals, iup_mat, idw_mat = build_mb_ham(H, V, states_up, states_dw)
+    sct = build_empty_sector(n, nup, ndw)
+    i_vals, iup_mat, idw_mat = build_mb_ham(H, V, sct)
 
     dup = iup_mat.shape[0]
     dwn = idw_mat.shape[0]
@@ -126,9 +125,8 @@ def test_build_mb_ham():
     nup = 0
     ndw = 2
 
-    states_up = generate_states(n, nup)
-    states_dw = generate_states(n, ndw)
-    i_vals, iup_mat, idw_mat = build_mb_ham(H, V, states_up, states_dw)
+    sct = build_empty_sector(n, nup, ndw)
+    i_vals, iup_mat, idw_mat = build_mb_ham(H, V, sct)
 
     dup = iup_mat.shape[0]
     dwn = idw_mat.shape[0]

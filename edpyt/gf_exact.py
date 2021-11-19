@@ -51,14 +51,14 @@ def project_exact_up(pos, n, op, sctI, sctJ):
     #                           (lattice sites)
     v0 = np.zeros((sctJ.eigvals.size,sctI.eigvals.size))
     check_occupation = check_full if op is c else check_empty # if op is cdg
-    for iupI in range(sctI.dup):
+    for iupI in range(sctI.states.up.size):
         supI = sctI.states.up[iupI]
         # Check for empty impurity
         if check_occupation(supI, pos):
             sgnJ, supJ = op(supI, pos, n)
             iupJ = binsearch(sctJ.states.up, supJ)
-            v0 += np.float64(sgnJ)*sctJ.eigvecs[iupJ::sctJ.dup,:].T.dot(
-                                   sctI.eigvecs[iupI::sctI.dup,:])
+            v0 += np.float64(sgnJ)*sctJ.eigvecs[iupJ::sctJ.states.up.size,:].T.dot(
+                                   sctI.eigvecs[iupI::sctI.states.up.size,:])
     return v0
 
 
@@ -74,14 +74,14 @@ def project_exact_dw(pos, n, op, sctI, sctJ):
     #                           (lattice sites)
     v0 = np.zeros((sctJ.eigvals.size,sctI.eigvals.size))
     check_occupation = check_full if op is c else check_empty # if op is cdg
-    for idwI in range(sctI.dwn):
+    for idwI in range(sctI.states.dw.size):
         sdwI = sctI.states.dw[idwI]
         # Check for empty impurity
         if check_occupation(sdwI, pos):
             sgnJ, sdwJ = op(sdwI, pos, n)
             idwJ = binsearch(sctJ.states.dw, sdwJ)
-            v0 += np.float64(sgnJ)*sctJ.eigvecs[idwJ*sctJ.dup:(idwJ+1)*sctJ.dup,:].T.dot(
-                                   sctI.eigvecs[idwI*sctI.dup:(idwI+1)*sctI.dup,:])
+            v0 += np.float64(sgnJ)*sctJ.eigvecs[idwJ*sctJ.states.up.size:(idwJ+1)*sctJ.states.up.size,:].T.dot(
+                                   sctI.eigvecs[idwI*sctI.states.up.size:(idwI+1)*sctI.states.up.size,:])
     return v0
 
 

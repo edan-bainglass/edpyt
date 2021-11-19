@@ -131,7 +131,7 @@ class Gfimp:
         return np.reciprocal(z-self.e0-self.delta(z).sum(1))
 
 # @njit(cache=True,fastmath=True)
-def get_evecs_occupation(evecs, exps, states_up, states_dw, pos):
+def get_evecs_occupation(evecs, exps, states, pos):
     """Count particles in sector eigen-state vectors (size=dup x dwn).
 
     """

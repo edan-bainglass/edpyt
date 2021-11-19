@@ -6,7 +6,7 @@ from numba.types import float64, uint32, Array
 from edpyt.ham_hopping import build_ham_hopping
 from edpyt.ham_non_local import build_ham_non_local
 from edpyt.ham_local import build_ham_local
-from edpyt.shared import unsiged_dt, params
+from edpyt.shared import params, unsiged_dt
 
 
 """
@@ -20,7 +20,7 @@ Conventions:
 
 """
 
-def build_mb_ham(H, V, states_up, states_dw, comm=None):
+def build_mb_ham(H, V, sct, comm=None):
     """Build sparse Hamiltonian of the sector.
 
     Args:
@@ -62,10 +62,13 @@ def build_mb_ham(H, V, states_up, states_dw, comm=None):
     
     operators = list()
     
-    operators.append(build_ham_local(H, U, states_up, states_dw, params['hfmode'], params['mu']))
-    operators.extend(build_ham_hopping(H, states_up, states_dw))
+    operators.append(build_ham_local(H, U, sct, hfmode=params['hfmode'], mu=params['mu']))
+    try:
+        operators.extend(build_ham_hopping(H, sct))
+    except NotImplementedError:
+        pass
     if (Jx is not None) or (Jp is not None):
-        operators.append(build_ham_non_local(Jx, Jp, states_up, states_dw, operators[0]))
+        operators.append(build_ham_non_local(Jx, Jp, sct, operators[0]))
 
     H.flags.writeable = True
 

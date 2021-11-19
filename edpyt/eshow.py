@@ -1,5 +1,7 @@
 from collections import defaultdict
 from edpyt.lookup import binrep
+from edpyt.shared import unsigned_one as uone
+
 
 def pdisplay(espace, ax=None):
     """Display charge spectrum.
@@ -16,15 +18,23 @@ def pdisplay(espace, ax=None):
     y = sum(pspace.values(), [])
     ax.hlines(y, [x-0.2 for x in xavg], [x+0.2 for x in xavg])
 
+
 def eprint(espace, n):
     """Print Hilbert space."""
     def fockstates(sct):
         
         states = []
-        for sdw in sct.states.dw:
-            for sup in sct.states.up:
+        if hasattr(states,'up'):
+            for sdw in sct.states.dw:
+                for sup in sct.states.up:
+                    states.append( fock(sup,sdw,n) )
+        else:
+            mask_up = (uone<<n)-uone # 000111
+            mask_dw = mask_up<<n # 111000
+            for s in sct.states:
+                sup = s&mask_up
+                sdw = (s&mask_dw)>>n
                 states.append( fock(sup,sdw,n) )
-
         return states
 
     estates = []
@@ -38,6 +48,7 @@ def eprint(espace, n):
         print(f'{ns}: {e:.3E}', v, sep='\n', end='\n\n')
     # print(*estates,sep='\n')        
         # print(ns,sct.eigvals.reshape(-1,1),evecs,sep='\n',end='\n\n')        
+
 
 def fock(sup, sdw, n):
     """Represent fock state.
