@@ -22,9 +22,9 @@ def _I1(C, eps, mu, beta):
     with np.errstate(divide='raise',over='ignore'): # 1/0.
         try:
             w = _nB(mu[1]-mu[0],beta)
-        except FloatingPointError as e:
-            if abs(f)<1e-18: # 0./0. -> 1.
-                return 1.
+        except FloatingPointError as e: # nB -> oo
+            if abs(f)<1e-13: # oo.*0. -> 0.
+                return 0.
             else:
                 raise e
     return w * f
@@ -40,9 +40,9 @@ def _I2(A, B, epsA, epsB, mu, beta):
         try:
             w = _nB(mu[1]-mu[0],beta)
             dAB_inv = 1. / (epsA - epsB)
-        except FloatingPointError as e:
-            if abs(f)<1e-18: # 0./0.
-                return 1.
+        except FloatingPointError as e: # nB -> oo or 1/dE -> oo
+            if abs(f)<1e-13: # oo*0. -> 0.
+                return 0.
             else:
                 raise e
     return w * dAB_inv * f

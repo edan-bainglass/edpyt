@@ -19,13 +19,17 @@ def abs2(r, i):
 def project(spin, position, operator, n, sctI, sctJ):
     """Project sector sctI onto eigenbasis of sector sctJ.
 
+    Args:
+        spin : s
+        position : i
+        operato : c or cdg
     """
     #                     ____
-    #         (+)         \             *             (+)       
-    # < j | c     | i > =  \           a   a   < s | c      | s  >    
-    #          p           /             j   i    j    p       i  
+    #        +/-          \             *             +/-       
+    # < k | c     | l > =  \           a   a   < s | c      | s  >    
+    #         i,s           /            k   k    k    i,s     l  
     #                     /____  
-    #                           i,j
+    #                           k,l
     v_JI = np.zeros((sctJ.eigvals.size,sctI.eigvals.size))
     for i in range(sctI.states.size):
         s = sctI.states[i]
@@ -38,67 +42,76 @@ def project(spin, position, operator, n, sctI, sctJ):
     return v_JI
 
 
-def excite(spins, particle, n, N, espace):
-    """Cotunneling rate for a lead electron to go from lead l' to lead l and
-    the central region to go from state n' to state n, i.e.:
-     
-            l' -> l
-            n' -> n     
+def excite_states(spins, operators, n, sctI, sctJ):
+    """Compute particle (electron or hole) excitations for sector.
+    
+    Args:
+        spins : [s', s]
+        operators : [c+,c-] for hole [c-,c+] for electron
+        n : # of sites
     """
     #                                   
-    #   +/-               -/+               +/-
-    #  y  (p,r) =   < n| c    | m  > < m | c      | n' >
-    #   nn'                p,s               r,s'
-    #                           
-    if particle == 'electron':
-        operators = [c, cdg]
-        sctJ = espace[(N+1,)]
-        sign = +1.
-    elif particle == 'hole':
-        operators = [cdg, c]
-        sctJ = espace[(N-1,)]
-        sign = -1.
-    else:
-        raise ValueError
-    sctI = sctF = espace[(N,)]
+    #   +/-                 -/+               +/-
+    #  y         =   < n'| c    | m  > < m | c      | n >
+    #   s'n'i,snj            s'i               sj
+    #    
+    sctF = sctI
     v_JI = np.empty((sctJ.eigvals.size,sctI.eigvals.size,n))
     v_FJ = np.empty((sctI.eigvals.size,sctJ.eigvals.size,n))
     for j in range(n):
         v_JI[...,j] = project(spins[1], j, operators[1], n, sctI, sctJ)
     for i in range(n):
         v_FJ[...,i] = project(spins[0], i, operators[0], n, sctJ, sctF)
-    dE = sctF.eigvals[:,None] - sctI.eigvals[None,:]
-    E =  sign * (sctJ.eigvals[None,:] - sctI.eigvals[:,None])
+    return v_FJ, v_JI
+
+def excite_electron(spins, n, N, espace):
+    """Compute electron green's function for N electrons sector.
+    
+    """                   
+    #                     
+    #    +               +          -                    1             +
+    #  G   (E)    =     A (inject) A (extract)     ---------------   y  
+    #   n's'i,nsj        i          j                E+ - En' - E      s'n'i,snj 
+    #
+    sctI = sctF = espace[(N,)]
+    sctJ = espace[(N+1,)]
+    v_FJ, v_JI = excite_states(spins, [c, cdg], n, sctI, sctJ)
+    dE_FI = sctF.eigvals[:,None] - sctI.eigvals[None,:]
+    dE_FJ = sctJ.eigvals[None,:] - sctF.eigvals[:,None]
     gfdict = dict()
     for f, i in np.ndindex(v_FJ.shape[0], v_JI.shape[1]):
-        gfdict[(N,f),(N,i)] = Gf2(v_FJ[f], v_JI[:,i].copy(), E[i], dE[f,i])
+        gfdict[(N,f),(N,i)] = Gf2(v_FJ[f], v_JI[:,i].copy(), dE_FJ[f], dE_FI[f,i])
+    return gfdict
+
+
+def excite_hole(spins, n, N, espace):
+    """Compute hole green's function for N electrons sector.
+    
+    """
+    #                     
+    #    -              +           -                    1             -
+    #  G   (E)    =    A (extract) A (inject)     ---------------   y  
+    #   n's'i,nsj        i          j                En - E- - E      s'n'i,snj
+    #
+    sctI = sctF = espace[(N,)]
+    sctJ = espace[(N-1,)]
+    v_FJ, v_JI = excite_states(spins, [cdg, c], n, sctI, sctJ)
+    dE_FI = sctF.eigvals[:,None] - sctI.eigvals[None,:]
+    dE_IJ = sctI.eigvals[:,None] - sctJ.eigvals[None,:]
+    gfdict = dict()
+    for f, i in np.ndindex(v_FJ.shape[0], v_JI.shape[1]):
+        gfdict[(N,f),(N,i)] = Gf2(v_FJ[f], v_JI[:,i].copy(), dE_IJ[i], dE_FI[f,i])
     return gfdict
 
 
 def build_transition_elements(n, espace, N=None, egs=None, cutoff=None):
     """Cotunneling rate from state n to state n' within sector with N electrons.
 
-    NOTE: The leads' and spin's indices are interchanged. For leads' indices
-    this is because we want the sum l' -> l + l' <- l. For spin, one can show
-    that to obtain the same final state n, the spin creation and annihilation
-    orders have to be swaped.
-    
-    Example:
-
-    |n'> = u,d
-    |n> = u+1,d-1
-    
-        |    u+     d-   |    d-      u+
-    ---------------------|-----------------
-    u,d | u+1,d  u+1,d-1 |  u,d-1  (u+1,d-1)   , same final state   
+    NOTE: that spins are interchanged to ensure equal initial and final states. 
     """
-    #                                            
-    #                                                      
-    #  __ll'ss'             +            1                       -               1      
-    #  \        (E)  =  (  y   (ss') ----------------     +     y   (s's) ----------------   ) n(E - (E - E)  - u)  (1-  n(E - u))
-    #  /__                  nn'       E -( E   - E  )            nn'      E - (E   - E)                n   n'    L              R     
-    #     nn'                               m+    n'                             n'    m-
-    #                                                                                                                           
+    #                |     +                 -          |
+    #  S  (E)      = |   G   (E)        +  G    (E)     | . .  n  (E - En' - En - mu(extract))  ( 1 - n  (E - mu(inject)))
+    #   s'n'i,snj    |     n's'i,nsj         n'si,ns'j  |       F                                       F                 
     if N is None:
         assert egs is not None, "Must provide either groud state or particle sector number."
         egs = np.inf
@@ -110,11 +123,11 @@ def build_transition_elements(n, espace, N=None, egs=None, cutoff=None):
     for spins in product(range(2), repeat=2):
         # Electron and hole green functions.
         try:
-            gf2edict = excite(spins, 'electron', n, N, espace)
+            gf2edict = excite_electron(spins, n, N, espace)
         except OutOfHilbertError:
             gf2edict = dict() # empty
         try:
-            gf2hdict = excite(list(reversed(spins)), 'hole', n, N, espace)
+            gf2hdict = excite_hole(list(reversed(spins)), n, N, espace)
         except OutOfHilbertError:
             gf2hdict = dict()
         # Sigma        
@@ -126,7 +139,6 @@ def build_transition_elements(n, espace, N=None, egs=None, cutoff=None):
         return screen_transition_elements(sigmadict, egs, espace, cutoff)
     return sigmadict
 
-
 class Gf2:
     """Green's function.
     
@@ -136,7 +148,6 @@ class Gf2:
         v_JI : <m-|c|n'> or <m+|c+|n'>
         dE = En-En'
     """
-                           
     #    +(-)              1           
     #  y          ---------------- 
     #    nn'       E -( E   - E  )
@@ -150,9 +161,15 @@ class Gf2:
     def __call__(self, z, aF, aI):
         z = np.atleast_1d(z)
         res = np.einsum('j,j,kj->k',aF.dot(self.vF.T),aI.dot(self.vI.T),
-                        np.reciprocal(z-self.E[None,:]))
+                        np.reciprocal(self.E[None,:]-z[:,None]))
         return res
 
+
+nF = lambda x: 1/(np.exp(x)+1)
+nF.__doc__ = "Fermi function."
+
+G = lambda x: x/(np.exp(x)-1)
+G.__doc__ = "Fermi function."
 
 class _Sigma:
     """Base class for Sigma."""
@@ -175,8 +192,19 @@ class _Sigma:
 
     def approximate(self, A, extract, inject, beta, mu):
         return self.G(beta, self.dE-mu[extract]+mu[inject]
-               ) * self(0.5*(self.dE+sum(mu)), A, extract, inject)
-              
+               ) * self(0.5*(self.dE-mu[extract]+mu[inject]), A, extract, inject)
+    
+    def numeric(self, A, extract, inject, beta, mu):
+        mu_extract = mu[extract] - self.dE
+        mu_inject = mu[inject]
+        # if mu_extract - mu_inject < 0.:
+        #     return 0.
+        mu_low, mu_high = sorted((mu_extract, mu_inject))
+        eners = np.linspace(mu_low-4/beta, mu_high+4/beta, 200, endpoint=True)
+        return np.trapz(self(eners,A,extract,inject)
+                        * nF(beta*(eners-mu_extract)
+                        * nF(-beta*(eners-mu_inject))), # (1 - nF)
+                        eners)
 
 class _Sigmae(_Sigma):
     """Electron."""
@@ -185,10 +213,16 @@ class _Sigmae(_Sigma):
     #  |  e     | 
     
     def integrate(self, A, extract, inject, beta, mu):
-        return Gamma1(
-            A[inject].dot(self.gf2.vF[0])*A[extract].dot(self.gf2.vI[0]), # A
-            self.gf2.E[0], # epsA
-            [mu[extract]-self.dE,mu[inject]], beta)
+        a = A[inject].dot(self.gf2.vF.T)*A[extract].dot(self.gf2.vI.T)
+        nnz_a, = np.nonzero(a)
+        if nnz_a.any():
+            j = nnz_a.min()
+            return Gamma1(
+                a[j], # A
+                -self.gf2.E[j], # epsA
+                [mu[extract]-self.dE,mu[inject]], beta)
+        else:
+            return 0.
 
     def __call__(self, z, A, extract, inject):
         res = self.gf2(z, A[inject], A[extract])
@@ -202,10 +236,16 @@ class _Sigmah(_Sigma):
     #  |  h     | 
     
     def integrate(self, A, extract, inject, beta, mu):
-        return Gamma1(
-            A[extract].dot(self.gf2.vF[0])*A[inject].dot(self.gf2.vI[0]), # A
-            self.gf2.E[0], # epsA
-            [mu[extract]-self.dE,mu[inject]], beta)
+        a = A[extract].dot(self.gf2.vF.T)*A[inject].dot(self.gf2.vI.T)
+        nnz_a, = np.nonzero(a)
+        if nnz_a.any():
+            j = nnz_a.min()
+            return Gamma1(
+                a[j], # A
+                -self.gf2.E[j], # epsA
+                [mu[extract]-self.dE,mu[inject]], beta)
+        else:
+            return 0.
     
     def __call__(self, z, A, extract, inject):
         res = self.gf2(z, A[extract], A[inject])
@@ -230,12 +270,33 @@ class Sigma(_Sigma):
         super().__init__(self.gf2e)
     
     def integrate(self, A, extract, inject, beta, mu):
-        return Gamma2(
-            A[inject].dot(self.gf2e.vF[0])*A[extract].dot(self.gf2e.vI[0]), #A
-            A[extract].dot(self.gf2h.vF[0])*A[inject].dot(self.gf2h.vI[0]), #B
-            self.gf2e.E[0], # epsA
-            self.gf2h.E[0], # epsB
-            [mu[extract]-self.dE,mu[inject]], beta)
+        a = A[inject].dot(self.gf2e.vF.T)*A[extract].dot(self.gf2e.vI.T)
+        b = A[extract].dot(self.gf2h.vF.T)*A[inject].dot(self.gf2h.vI.T)
+        nnz_a, = np.nonzero(a)
+        nnz_b, = np.nonzero(b)
+        if nnz_a.any():
+            j = nnz_a.min()
+            if nnz_b.any():
+                k = nnz_b.min()
+                return Gamma2(
+                    a[j], #A
+                    b[k], #B
+                    -self.gf2e.E[j], # epsA
+                    -self.gf2h.E[k], # epsB
+                    [mu[extract]-self.dE,mu[inject]], beta)
+            else:
+                return Gamma1(
+                    a[j], # A
+                    -self.gf2e.E[j], # epsA
+                    [mu[extract]-self.dE,mu[inject]], beta)
+        elif nnz_b.any():
+            k = nnz_b.min()
+            return Gamma1(
+              b[k],
+              -self.gf2h.E[k],
+              [mu[extract]-self.dE,mu[inject]], beta)
+        else:
+            return 0.
 
     def __call__(self, z, A, extract, inject):
         res = self.gf2e(z, A[inject], A[extract]) + self.gf2h(z, A[extract], A[inject])
@@ -243,7 +304,7 @@ class Sigma(_Sigma):
     
 
 # https://journals.aps.org/prb/pdf/10.1103/PhysRevB.74.205438
-def build_rate_matrix(sigmadict, beta, mu, A, approx_integral=False):
+def build_rate_matrix(sigmadict, beta, mu, A, integrate_method='approximate'):
     #          ___
     #         |     __                      
     #         |    \     _             _   
@@ -255,7 +316,7 @@ def build_rate_matrix(sigmadict, beta, mu, A, approx_integral=False):
     #         |         10           /__     k1  
     #         |                          k!=1
     #         |       :                :          \
-    integrate = attrgetter('approximate') if approx_integral else attrgetter('integrate')
+    integrate = attrgetter(integrate_method)
     sz, odd = np.divmod(len(sigmadict), 2)
     assert ~odd, """
         Invalid sigma list. Each matrix element must contain 
@@ -272,20 +333,20 @@ def build_rate_matrix(sigmadict, beta, mu, A, approx_integral=False):
                     gamma = 0.
                     for sigma in sigmadict[map[f],map[i]]:
                         gamma += integrate(sigma)(A, extract, inject, beta, mu)
-                except:
+                except KeyError:
                     continue
                 W[i,i] -= gamma
                 W[f,i] += gamma
     return W
 
 
-def build_transition_matrix(sigmadict, beta, mu, A, extract, inject, approx_integral=False):
+def build_transition_matrix(sigmadict, beta, mu, A, extract, inject, integrate_method='approximate'):
     sz, odd = np.divmod(len(sigmadict), 2)
     assert ~odd, """
         Invalid sigma list. Each matrix element must contain 
         its complex conjugate.
     """
-    integrate = attrgetter('approximate') if approx_integral else attrgetter('integrate')
+    integrate = attrgetter(integrate_method)
     idF = sorted(set([idF for idF, _ in sigmadict.keys()]))
     map = {i:id for i,id in enumerate(idF)}
     sz = len(idF)
@@ -296,7 +357,7 @@ def build_transition_matrix(sigmadict, beta, mu, A, extract, inject, approx_inte
             for sigma in sigmadict[map[f],map[i]]:
                 gamma += integrate(sigma)(A, extract, inject, beta, mu)
                 gamma -= integrate(sigma)(A, inject, extract, beta, mu)
-        except:
+        except KeyError:
             continue
         T[f,i] = gamma
     return T
