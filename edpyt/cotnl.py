@@ -1,10 +1,15 @@
+from functools import lru_cache
+from numba.core.decorators import njit
 import numpy as np
 from numba import vectorize
 from itertools import product
 from collections import defaultdict
 from operator import attrgetter
 
-from edpyt.integrals import Gamma1, Gamma2
+from numpy.lib.function_base import extract
+from traitlets.traitlets import default
+
+from edpyt.integrals import I1, I2
 from edpyt.lookup import binsearch
 from edpyt.operators import cdg, c
 from edpyt.sector import OutOfHilbertError
@@ -80,7 +85,7 @@ def excite_electron(spins, n, N, espace):
     dE_FJ = sctJ.eigvals[None,:] - sctF.eigvals[:,None]
     gfdict = dict()
     for f, i in np.ndindex(v_FJ.shape[0], v_JI.shape[1]):
-        gfdict[(N,f),(N,i)] = Gf2(v_FJ[f], v_JI[:,i].copy(), dE_FJ[f], dE_FI[f,i])
+        gfdict[(N,f),(N,i)] = Gf2e(v_FJ[f], v_JI[:,i].copy(), dE_FJ[f], dE_FI[f,i])
     return gfdict
 
 
@@ -100,7 +105,7 @@ def excite_hole(spins, n, N, espace):
     dE_IJ = sctI.eigvals[:,None] - sctJ.eigvals[None,:]
     gfdict = dict()
     for f, i in np.ndindex(v_FJ.shape[0], v_JI.shape[1]):
-        gfdict[(N,f),(N,i)] = Gf2(v_FJ[f], v_JI[:,i].copy(), dE_IJ[i], dE_FI[f,i])
+        gfdict[(N,f),(N,i)] = Gf2h(v_FJ[f], v_JI[:,i].copy(), dE_IJ[i], dE_FI[f,i])
     return gfdict
 
 
@@ -139,6 +144,7 @@ def build_transition_elements(n, espace, N=None, egs=None, cutoff=None):
         return screen_transition_elements(sigmadict, egs, espace, cutoff)
     return sigmadict
 
+
 class Gf2:
     """Green's function.
     
@@ -157,151 +163,138 @@ class Gf2:
         self.vI = vI
         self.E = E
         self.dE = dE
-        
-    def __call__(self, z, aF, aI):
+    
+    def y(self, A, extract, inject):
+        raise NotImplementedError
+    
+    def __call__(self, z, A, extract, inject):
         z = np.atleast_1d(z)
-        res = np.einsum('j,j,kj->k',aF.dot(self.vF.T),aI.dot(self.vI.T),
+        res = np.einsum('j,kj->k',self.y(A, extract, inject),
                         np.reciprocal(self.E[None,:]-z[:,None]))
         return res
+
+
+class Gf2e(Gf2):
+    
+    def __init__(self, vF, vI, E, dE) -> None:
+        super().__init__(vF, vI, E, dE)
+        
+    def y(self, A, extract, inject):
+        return A[inject].dot(self.vF.T)*A[extract].dot(self.vI.T)
+
+
+class Gf2h(Gf2):
+    
+    def __init__(self, vF, vI, E, dE) -> None:
+        super().__init__(vF, vI, E, dE)
+        
+    def y(self, A, extract, inject):
+        return A[extract].dot(self.vF.T)*A[inject].dot(self.vI.T)        
 
 
 nF = lambda x: 1/(np.exp(x)+1)
 nF.__doc__ = "Fermi function."
 
-G = lambda x: x/(np.exp(x)-1)
-G.__doc__ = "Fermi function."
+# def G(a, x):
+#     if x < 1e-3:
+#         return GTaylor(a, x)
+#     if x > 1e13:
+#         return 0.
+#     return x/(np.exp(a*x)-1)
 
-class _Sigma:
-    """Base class for Sigma."""
-    def __init__(self, gf2) -> None:
-        self.gf2 = gf2
+# GTaylor = lambda a, x: 1/a - x/2 + a*x**2/12 - a**3*x**4/720
 
-    def __getattr__(self, name):
-        if name in ['idF','idI','dS','dE']:
-            return getattr(self.gf2, name)
-        raise AttributeError
+def G(beta, z):
+    """Helper function for approximate solution."""
+    if (beta*abs(z))<1e-18:
+        return 1.
+    if (beta*z)>1e3:
+        return 0.
+    return z/(np.exp(beta*z)-1)
 
-    @staticmethod
-    def G(beta, z):
-        """Helper function for approximate solution."""
-        if (beta*abs(z))<1e-18:
-            return 1.
-        if (beta*z)>1e3:
-            return 0.
-        return z/(np.exp(beta*z)-1)
 
-    def approximate(self, A, extract, inject, beta, mu):
-        return self.G(beta, self.dE-mu[extract]+mu[inject]
-               ) * self(0.5*(self.dE-mu[extract]+mu[inject]), A, extract, inject)
+class Sigma:
     
-    def numeric(self, A, extract, inject, beta, mu):
+    def __init__(self, gf2e=None, gf2h=None) -> None:
+        self.gf2 = [gf for gf in [gf2e,gf2h] if gf is not None]
+        self.dE = self.gf2[0].dE
+
+    def __call__(self, z, A, extract, inject):
+        res = sum(gf2(z, A, extract, inject) for gf2 in self.gf2)
+        return res**2
+    
+    def approximate(self, A, extract, inject, beta, mu):
+        x = self.dE-mu[extract]+mu[inject]
+        return G(beta, x) * self(0.5*x, A, extract, inject)
+    
+    def exact(self, A, extract, inject, beta, mu):
+        mu = [mu[extract]-self.dE,mu[inject]]
+        y = [gf.y(A, extract, inject) for gf in self.gf2]
+        E = [-gf.E for gf in self.gf2]
+        res = 0.
+        Cff = []
+        Eps = []
+        for A, eps in zip(y, E):
+            try:
+                j = np.nonzero(A)[0].min()
+            except ValueError:
+                continue
+            Cff.append(A[j])
+            Eps.append(eps[j])
+            res += I1(A[j], eps[j], mu, beta)
+        if len(Cff) == 2:
+            res += I2(*Cff, *Eps, mu, beta)
+        return res
+
+    def integrate(self, A, extract, inject, beta, mu):
         mu_extract = mu[extract] - self.dE
         mu_inject = mu[inject]
-        # if mu_extract - mu_inject < 0.:
-        #     return 0.
         mu_low, mu_high = sorted((mu_extract, mu_inject))
         eners = np.linspace(mu_low-4/beta, mu_high+4/beta, 200, endpoint=True)
         return np.trapz(self(eners,A,extract,inject)
                         * nF(beta*(eners-mu_extract)
                         * nF(-beta*(eners-mu_inject))), # (1 - nF)
                         eners)
+            
 
-class _Sigmae(_Sigma):
-    """Electron."""
-    #  |        | 2
-    #  | G  (z) |   
-    #  |  e     | 
-    
-    def integrate(self, A, extract, inject, beta, mu):
-        a = A[inject].dot(self.gf2.vF.T)*A[extract].dot(self.gf2.vI.T)
-        nnz_a, = np.nonzero(a)
-        if nnz_a.any():
-            j = nnz_a.min()
-            return Gamma1(
-                a[j], # A
-                -self.gf2.E[j], # epsA
-                [mu[extract]-self.dE,mu[inject]], beta)
-        else:
-            return 0.
+def build_rate_and_transition_matrices(sigmadict, beta, mu, A, extract, inject, integrate_method='approximate'):
+    #          ___
+    #         |     __                      
+    #         |    \     _             _   
+    #         |  -      |             |            --  
+    #         |    /__     k0           01
+    #         |        k!=0           __         
+    #  W  =   |        _             \     _       --  
+    #         |       |            -      |          
+    #         |         10           /__     k1  
+    #         |                          k!=1
+    #         |       :                :          \
+    integrate = attrgetter(integrate_method)
+    sz, odd = np.divmod(len(sigmadict), 2)
+    assert ~odd, """
+        Invalid sigma list. Each matrix element must contain 
+        its complex conjugate.
+    """
+    idF = sorted(set([idF for idF, _ in sigmadict.keys()]))
+    map = {i:id for i,id in enumerate(idF)}
+    sz = len(idF)
+    W = np.zeros((sz, sz))
+    T = np.zeros((sz, sz))
+    for i, f in np.ndindex(sz, sz):
+        try:
+            sigmalist = sigmadict[map[f],map[i]]
+        except KeyError:
+            continue
+        gamma = np.zeros((2,2))
+        for lead1, lead2 in np.ndindex(2, 2):
+            for sigma in sigmalist:
+                gamma[lead1,lead2] += integrate(sigma)(A, lead1, lead2, beta, mu)
+        if i != f:
+            W[i,i] -= gamma.sum()
+            W[f,i] += gamma.sum()
+        T[f,i] += gamma[extract,inject] - gamma[inject,extract]
+    return W, T
 
-    def __call__(self, z, A, extract, inject):
-        res = self.gf2(z, A[inject], A[extract])
-        return abs2(res.real, res.imag)
-    
-
-class _Sigmah(_Sigma):
-    """Hole."""
-    #  |        | 2
-    #  | G  (z) |   
-    #  |  h     | 
-    
-    def integrate(self, A, extract, inject, beta, mu):
-        a = A[extract].dot(self.gf2.vF.T)*A[inject].dot(self.gf2.vI.T)
-        nnz_a, = np.nonzero(a)
-        if nnz_a.any():
-            j = nnz_a.min()
-            return Gamma1(
-                a[j], # A
-                -self.gf2.E[j], # epsA
-                [mu[extract]-self.dE,mu[inject]], beta)
-        else:
-            return 0.
-    
-    def __call__(self, z, A, extract, inject):
-        res = self.gf2(z, A[extract], A[inject])
-        return abs2(res.real, res.imag)
-     
-               
-class Sigma(_Sigma):
-    #   |                   |  2
-    #   | G  (z) + G    (z) |      
-    #   |  e         h      |      
-    def __new__(cls, gf2e, gf2h):
-        if gf2h is None:
-            return _Sigmae(gf2e)
-        if gf2e is None:
-            return _Sigmah(gf2h)
-        return super().__new__(cls)
-    
-    def __init__(self, gf2e, gf2h) -> None:
-        self.gf2e = gf2e
-        self.gf2h = gf2h
-        # Default of gf2e params
-        super().__init__(self.gf2e)
-    
-    def integrate(self, A, extract, inject, beta, mu):
-        a = A[inject].dot(self.gf2e.vF.T)*A[extract].dot(self.gf2e.vI.T)
-        b = A[extract].dot(self.gf2h.vF.T)*A[inject].dot(self.gf2h.vI.T)
-        nnz_a, = np.nonzero(a)
-        nnz_b, = np.nonzero(b)
-        if nnz_a.any():
-            j = nnz_a.min()
-            if nnz_b.any():
-                k = nnz_b.min()
-                return Gamma2(
-                    a[j], #A
-                    b[k], #B
-                    -self.gf2e.E[j], # epsA
-                    -self.gf2h.E[k], # epsB
-                    [mu[extract]-self.dE,mu[inject]], beta)
-            else:
-                return Gamma1(
-                    a[j], # A
-                    -self.gf2e.E[j], # epsA
-                    [mu[extract]-self.dE,mu[inject]], beta)
-        elif nnz_b.any():
-            k = nnz_b.min()
-            return Gamma1(
-              b[k],
-              -self.gf2h.E[k],
-              [mu[extract]-self.dE,mu[inject]], beta)
-        else:
-            return 0.
-
-    def __call__(self, z, A, extract, inject):
-        res = self.gf2e(z, A[inject], A[extract]) + self.gf2h(z, A[extract], A[inject])
-        return abs2(res.real, res.imag)
-    
 
 # https://journals.aps.org/prb/pdf/10.1103/PhysRevB.74.205438
 def build_rate_matrix(sigmadict, beta, mu, A, integrate_method='approximate'):
