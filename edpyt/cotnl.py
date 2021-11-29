@@ -115,8 +115,8 @@ def build_transition_elements(n, espace, N=None, egs=None, cutoff=None):
     NOTE: that spins are interchanged to ensure equal initial and final states. 
     """
     #                |     +                 -          |
-    #  S  (E)      = |   G   (E)        +  G    (E)     | . .  n  (E - En' - En - mu(extract))  ( 1 - n  (E - mu(inject)))
-    #   s'n'i,snj    |     n's'i,nsj         n'si,ns'j  |       F                                       F                 
+    #  S  (E)      = |   G   (E)        +  G    (E)     | . n  (E - En' - En - mu(extract))  ( 1 - n  (E - mu(inject)))
+    #   s'n'i,snj    |     n's'i,nsj         n'si,ns'j  |    F                                       F                 
     if N is None:
         assert egs is not None, "Must provide either groud state or particle sector number."
         egs = np.inf
@@ -125,15 +125,16 @@ def build_transition_elements(n, espace, N=None, egs=None, cutoff=None):
                 N = qns[0]
                 egs = sct.eigvals.min()
     sigmadict = defaultdict(list) #dict.fromkeys(ispin)
+    N_max = 2*n
     for spins in product(range(2), repeat=2):
         # Electron and hole green functions.
-        try:
+        if N+1 < N_max:
             gf2edict = excite_electron(spins, n, N, espace)
-        except OutOfHilbertError:
+        else:
             gf2edict = dict() # empty
-        try:
+        if N-1 > 0:
             gf2hdict = excite_hole(list(reversed(spins)), n, N, espace)
-        except OutOfHilbertError:
+        else:
             gf2hdict = dict()
         # Sigma        
         for idF, idI in set(gf2edict).union(gf2hdict):
@@ -192,17 +193,14 @@ class Gf2h(Gf2):
         return A[extract].dot(self.vF.T)*A[inject].dot(self.vI.T)        
 
 
+# def nF(x):
+#     """Fermi distribution."""
+#     if x>1e3:
+#         return 0.
+#     return 1/(np.exp(x)+1)
 nF = lambda x: 1/(np.exp(x)+1)
 nF.__doc__ = "Fermi function."
 
-# def G(a, x):
-#     if x < 1e-3:
-#         return GTaylor(a, x)
-#     if x > 1e13:
-#         return 0.
-#     return x/(np.exp(a*x)-1)
-
-# GTaylor = lambda a, x: 1/a - x/2 + a*x**2/12 - a**3*x**4/720
 
 def G(beta, z):
     """Helper function for approximate solution."""
@@ -212,6 +210,17 @@ def G(beta, z):
         return 0.
     return z/(np.exp(beta*z)-1)
 
+# from numba import vectorize, guvectorize
+
+# @guvectorize('(float64,float64[:],float64[:])','(),(n)->(n)')
+# def G(a, x, out):
+#     for i in range(x.size):
+#         if -1e-4 < x[i] < 1e-4:
+#             out[i] = 1/a - x[i]/2 + a*x[i]**2/12 - a**3*x[i]**4/720
+#         elif x[i]>1e13:
+#             out[i] = 0.
+#         else:
+#             out[i] = x[i]/(np.exp(a*x[i])-1)
 
 class Sigma:
     
@@ -255,105 +264,121 @@ class Sigma:
                         * nF(beta*(eners-mu_extract)
                         * nF(-beta*(eners-mu_inject))), # (1 - nF)
                         eners)
-            
 
-def build_rate_and_transition_matrices(sigmadict, beta, mu, A, extract, inject, integrate_method='approximate'):
-    #          ___
-    #         |     __                      
-    #         |    \     _             _   
-    #         |  -      |             |            --  
-    #         |    /__     k0           01
-    #         |        k!=0           __         
-    #  W  =   |        _             \     _       --  
-    #         |       |            -      |          
-    #         |         10           /__     k1  
-    #         |                          k!=1
-    #         |       :                :          \
+
+def get_unique_ids(sigmadict):
+    sorted_keys = lambda keys, idx: sorted(set(map(lambda ids: ids[idx], keys)))
+    idF = sorted_keys(sigmadict.keys(), 0)
+    idI = sorted_keys(sigmadict.keys(), 1)
+    return set(idF), set(idI)
+
+
+def check_transition_elements(sigmadict):
+    idF, idI = get_unique_ids(sigmadict)    
+    assert idF.union(idI) == idF, "Missing transition rates. Must provide n->n' & n'->n."
+
+
+# https://journals.aps.org/prb/pdf/10.1103/PhysRevB.74.205438
+def build_rate_and_transition_matrices(sigmadict, beta, mu, A, extract, inject, 
+                                       integrate_method='approximate', build_matrices=True):
+    #                ___                                  ___     _   _
+    #  |     |      |     __                                 |   |     |     
+    #  |     |      |    \     _             _               |   |     | 
+    #  | |0> |      |  -      |             |            --  |   |  P  |     
+    #  |     |      |    /__     k0           01             |   |   0 | 
+    #  |     |      |        k!=0           __               |   |     | 
+    #  |     |  =   |        _             \     _       --  |   |     |      
+    #  | |1> |      |       |            -      |            |   |  P  |      
+    #  |     |      |         10           /__     k1        |   |   1 | 
+    #  |     |      |                          k!=1          |   |     |     
+    #  |  :  |      |       :                :          \    |   |  :  |     
+    check_transition_elements(sigmadict)
     integrate = attrgetter(integrate_method)
-    sz, odd = np.divmod(len(sigmadict), 2)
-    assert ~odd, """
-        Invalid sigma list. Each matrix element must contain 
-        its complex conjugate.
-    """
-    idF = sorted(set([idF for idF, _ in sigmadict.keys()]))
-    map = {i:id for i,id in enumerate(idF)}
-    sz = len(idF)
-    W = np.zeros((sz, sz))
-    T = np.zeros((sz, sz))
-    for i, f in np.ndindex(sz, sz):
-        try:
-            sigmalist = sigmadict[map[f],map[i]]
-        except KeyError:
-            continue
+    W = defaultdict(lambda: 0.)
+    T = defaultdict(lambda: 0.)
+    for (idF,idI), sigmalist in sigmadict.items():
         gamma = np.zeros((2,2))
         for lead1, lead2 in np.ndindex(2, 2):
             for sigma in sigmalist:
                 gamma[lead1,lead2] += integrate(sigma)(A, lead1, lead2, beta, mu)
-        if i != f:
-            W[i,i] -= gamma.sum()
-            W[f,i] += gamma.sum()
-        T[f,i] += gamma[extract,inject] - gamma[inject,extract]
+        if idF[1] != idI[1]:
+            W[idI,idI] -= gamma.sum()
+            W[idF,idI] += gamma.sum()
+        T[idF,idI] += gamma[extract,inject] - gamma[inject,extract]
+    if build_matrices:
+        return map(lambda D: dict_to_matrix(D), [W,T])
     return W, T
 
 
-# https://journals.aps.org/prb/pdf/10.1103/PhysRevB.74.205438
-def build_rate_matrix(sigmadict, beta, mu, A, integrate_method='approximate'):
-    #          ___
-    #         |     __                      
-    #         |    \     _             _   
-    #         |  -      |             |            --  
-    #         |    /__     k0           01
-    #         |        k!=0           __         
-    #  W  =   |        _             \     _       --  
-    #         |       |            -      |          
-    #         |         10           /__     k1  
-    #         |                          k!=1
-    #         |       :                :          \
-    integrate = attrgetter(integrate_method)
-    sz, odd = np.divmod(len(sigmadict), 2)
-    assert ~odd, """
-        Invalid sigma list. Each matrix element must contain 
-        its complex conjugate.
-    """
-    idF = sorted(set([idF for idF, _ in sigmadict.keys()]))
-    map = {i:id for i,id in enumerate(idF)}
-    sz = len(idF)
-    W = np.zeros((sz, sz))
-    for extract, inject in np.ndindex(2, 2):
-        for i, f in np.ndindex(sz, sz):
-            if i != f:
-                try:
-                    gamma = 0.
-                    for sigma in sigmadict[map[f],map[i]]:
-                        gamma += integrate(sigma)(A, extract, inject, beta, mu)
-                except KeyError:
-                    continue
-                W[i,i] -= gamma
-                W[f,i] += gamma
-    return W
+def dict_to_matrix(D):
+    id1, id2 = get_unique_ids(D)
+    iD = sorted(id1.union(id2))
+    map = {id:i for i,id in enumerate(iD)}
+    sz = len(iD)
+    M = np.zeros((sz,sz))
+    for (id1,id2), val in D.items():
+        M[map[id1],map[id2]] += val
+    return M
 
 
-def build_transition_matrix(sigmadict, beta, mu, A, extract, inject, integrate_method='approximate'):
-    sz, odd = np.divmod(len(sigmadict), 2)
-    assert ~odd, """
-        Invalid sigma list. Each matrix element must contain 
-        its complex conjugate.
-    """
-    integrate = attrgetter(integrate_method)
-    idF = sorted(set([idF for idF, _ in sigmadict.keys()]))
-    map = {i:id for i,id in enumerate(idF)}
-    sz = len(idF)
-    T = np.zeros((sz, sz))
-    for i, f in np.ndindex(sz, sz):
-        try:
-            gamma = 0.
-            for sigma in sigmadict[map[f],map[i]]:
-                gamma += integrate(sigma)(A, extract, inject, beta, mu)
-                gamma -= integrate(sigma)(A, inject, extract, beta, mu)
-        except KeyError:
-            continue
-        T[f,i] = gamma
-    return T
+# # https://journals.aps.org/prb/pdf/10.1103/PhysRevB.74.205438
+# def build_rate_matrix(sigmadict, beta, mu, A, integrate_method='approximate'):
+#     #          ___
+#     #         |     __                      
+#     #         |    \     _             _   
+#     #         |  -      |             |            --  
+#     #         |    /__     k0           01
+#     #         |        k!=0           __         
+#     #  W  =   |        _             \     _       --  
+#     #         |       |            -      |          
+#     #         |         10           /__     k1  
+#     #         |                          k!=1
+#     #         |       :                :          \
+#     integrate = attrgetter(integrate_method)
+#     sz, odd = np.divmod(len(sigmadict), 2)
+#     assert ~odd, """
+#         Invalid sigma list. Each matrix element must contain 
+#         its complex conjugate.
+#     """
+#     idF = sorted(set([idF for idF, _ in sigmadict.keys()]))
+#     map = {i:id for i,id in enumerate(idF)}
+#     sz = len(idF)
+#     W = np.zeros((sz, sz))
+#     for extract, inject in np.ndindex(2, 2):
+#         for i, f in np.ndindex(sz, sz):
+#             if i != f:
+#                 try:
+#                     gamma = 0.
+#                     for sigma in sigmadict[map[f],map[i]]:
+#                         gamma += integrate(sigma)(A, extract, inject, beta, mu)
+#                 except KeyError:
+#                     continue
+#                 W[i,i] -= gamma
+#                 W[f,i] += gamma
+#     return W
+
+
+# def build_transition_matrix(sigmadict, beta, mu, A, extract, inject, integrate_method='approximate'):
+#     sz, odd = np.divmod(len(sigmadict), 2)
+#     assert ~odd, """
+#         Invalid sigma list. Each matrix element must contain 
+#         its complex conjugate.
+#     """
+#     integrate = attrgetter(integrate_method)
+#     idF = sorted(set([idF for idF, _ in sigmadict.keys()]))
+#     map = {i:id for i,id in enumerate(idF)}
+#     sz = len(idF)
+#     T = np.zeros((sz, sz))
+#     for i, f in np.ndindex(sz, sz):
+#         try:
+#             gamma = 0.
+#             for sigma in sigmadict[map[f],map[i]]:
+#                 gamma += integrate(sigma)(A, extract, inject, beta, mu)
+#                 gamma -= integrate(sigma)(A, inject, extract, beta, mu)
+#         except KeyError:
+#             continue
+#         T[f,i] = gamma
+#     return T
 
 
 def screen_transition_elements(sigmadict, egs, espace, cutoff):
