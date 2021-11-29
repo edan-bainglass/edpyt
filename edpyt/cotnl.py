@@ -140,7 +140,8 @@ def build_transition_elements(n, espace, N=None, egs=None, cutoff=None):
         for idF, idI in set(gf2edict).union(gf2hdict):
             gf2e = gf2edict.pop((idF,idI),None)
             gf2h = gf2hdict.pop((idF,idI),None)
-            sigmadict[idF,idI].append(Sigma(gf2e,gf2h))
+            sigmadict[idF,idI].append(Sigma(spins,gf2e,gf2h))
+    sigmadict = {(idF,idI):sigmadict[(idF,idI)] for (idF,idI) in sorted(sigmadict.keys())}
     if cutoff is not None:
         return screen_transition_elements(sigmadict, egs, espace, cutoff)
     return sigmadict
@@ -224,9 +225,13 @@ def G(beta, z):
 
 class Sigma:
     
-    def __init__(self, gf2e=None, gf2h=None) -> None:
+    def __init__(self, spins, gf2e=None, gf2h=None) -> None:
+        self.spins = spins
         self.gf2 = [gf for gf in [gf2e,gf2h] if gf is not None]
         self.dE = self.gf2[0].dE
+
+    def __repr__(self) -> str:
+        return f'Sigma(spins={self.spins},dE={self.dE:.5E})'
 
     def __call__(self, z, A, extract, inject):
         res = sum(gf2(z, A, extract, inject) for gf2 in self.gf2)
@@ -301,7 +306,8 @@ def build_rate_and_transition_matrices(sigmadict, beta, mu, A, extract, inject,
         for lead1, lead2 in np.ndindex(2, 2):
             for sigma in sigmalist:
                 gamma[lead1,lead2] += integrate(sigma)(A, lead1, lead2, beta, mu)
-        if idF[1] != idI[1]:
+        if idF != idI:
+        # if idF[1] != idI[1]:
             W[idI,idI] -= gamma.sum()
             W[idF,idI] += gamma.sum()
         T[idF,idI] += gamma[extract,inject] - gamma[inject,extract]
@@ -382,7 +388,33 @@ def dict_to_matrix(D):
 
 
 def screen_transition_elements(sigmadict, egs, espace, cutoff):
-    return {(idF, idI):sigma for (idF, idI),sigma in sigmadict.items() 
-            if (abs(sigma[0].dE)<cutoff)
-            and(abs(espace[idF[:1]].eigvals[idF[1]]-egs)<cutoff)
-            and(abs(espace[idI[:1]].eigvals[idI[1]]-egs)<cutoff)}
+    sigmadict = {(idF,idI):sigmalist for (idF,idI),sigmalist in sigmadict.items()
+                if abs(sigmalist[0].dE)<cutoff
+                and(abs(espace[idF[:1]].eigvals[idF[1]]-egs)<cutoff)
+                and(abs(espace[idI[:1]].eigvals[idI[1]]-egs)<cutoff)}
+    n = sigmadict[next(iter(sigmadict))][0].gf2[0].vF.shape[1]
+    A = np.ones((2,n))
+    screened = {}
+    for (idF,idI), sigmalist in sigmadict.items():
+        sigmas = []
+        for sigma in sigmalist:
+            gfs = []
+            for gf in sigma.gf2:
+                y = gf.y(A, 1, 0)
+                nnz_idx = np.abs(y) > 1e-10
+                if any(nnz_idx):
+                    gfs.append(gf)
+                    gf.vF = gf.vF[nnz_idx,:]
+                    gf.vI = gf.vI[nnz_idx,:]
+                    gf.E = gf.E[nnz_idx]
+            sigma.gf2 = gfs
+            if gfs: # list not empty
+                sigmas.append(sigma)
+        if sigmas: # list not empty
+            screened[(idF,idI)] = sigmas
+    return screened
+                
+    # return {(idF, idI):sigma for (idF, idI),sigma in sigmadict.items() 
+    #         if (abs(sigma[0].dE)<cutoff)
+    #         and(abs(espace[idF[:1]].eigvals[idF[1]]-egs)<cutoff)
+    #         and(abs(espace[idI[:1]].eigvals[idI[1]]-egs)<cutoff)}

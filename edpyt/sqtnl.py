@@ -6,7 +6,7 @@ from edpyt.cotnl import (c, cdg,
     # build_transition_elements as build_cotunneling_elements)
 
 
-# def extract_sequential_from_cotunneling(sigmadict, cutoff=None):
+# def extract_sequential_from_cotunneling(sigmadict):
 #     gfdict = defaultdict(list)
 #     for (idF,idI), sigmalist in sigmadict.items():
 #         N, i = idI
