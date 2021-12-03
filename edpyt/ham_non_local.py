@@ -176,7 +176,7 @@ def _N_build_ham_non_local(Jx, Jp, states, vec_diag):
     #        ss'       
     
     d = states.size
-    n = Jx.shape[0]
+    n = Jx.shape[0] if Jx is not None else Jp.shape[0]
     
     N = count_bits(states[0],2*n)
     

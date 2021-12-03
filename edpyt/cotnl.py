@@ -9,7 +9,7 @@ from operator import attrgetter
 from numpy.lib.function_base import extract
 from traitlets.traitlets import default
 
-from edpyt.integrals import I1, I2
+from edpyt.integrals import I1, I2, Gamma1, Gamma2, Gamma4
 from edpyt.lookup import binsearch
 from edpyt.operators import cdg, c
 from edpyt.sector import OutOfHilbertError
@@ -182,6 +182,8 @@ class Gf2e(Gf2):
         super().__init__(vF, vI, E, dE)
         
     def y(self, A, extract, inject):
+        # return np.sum((A[inject]*self.vF)[:,:,None]
+        #             * (A[extract]*self.vI)[:,None,:],(1,2))
         return A[inject].dot(self.vF.T)*A[extract].dot(self.vI.T)
 
 
@@ -191,6 +193,8 @@ class Gf2h(Gf2):
         super().__init__(vF, vI, E, dE)
         
     def y(self, A, extract, inject):
+        # return np.sum((A[extract]*self.vF)[:,:,None]
+        #             * (A[inject]*self.vI)[:,None,:],(1,2))
         return A[extract].dot(self.vF.T)*A[inject].dot(self.vI.T)        
 
 
@@ -239,26 +243,21 @@ class Sigma:
     
     def approximate(self, A, extract, inject, beta, mu):
         x = self.dE-mu[extract]+mu[inject]
-        return G(beta, x) * self(0.5*x, A, extract, inject)
+        # return G(beta, x) * self(0.5*x, A, extract, inject)
+        return G(beta, x) * self(0.5*(self.dE+sum(mu)), A, extract, inject)
     
     def exact(self, A, extract, inject, beta, mu):
         mu = [mu[extract]-self.dE,mu[inject]]
-        y = [gf.y(A, extract, inject) for gf in self.gf2]
-        E = [-gf.E for gf in self.gf2]
-        res = 0.
-        Cff = []
-        Eps = []
-        for A, eps in zip(y, E):
-            try:
-                j = np.nonzero(A)[0].min()
-            except ValueError:
-                continue
-            Cff.append(A[j])
-            Eps.append(eps[j])
-            res += I1(A[j], eps[j], mu, beta)
-        if len(Cff) == 2:
-            res += I2(*Cff, *Eps, mu, beta)
-        return res
+        Y = [Y for gf in self.gf2 for Y in gf.y(A, extract, inject)]
+        E = [-E for gf in self.gf2 for E in gf.E]
+        if len(Y) == 1:
+            return Gamma1(*Y,*E,mu,beta)
+        elif len(Y) == 2:
+            return Gamma2(*Y,*E,mu,beta)
+        elif len(Y) == 4:
+            return Gamma4(*Y,*E,mu,beta)
+        else:
+            raise NotImplementedError("Integral with {len(Y)} terms not yet implemented.")
 
     def integrate(self, A, extract, inject, beta, mu):
         mu_extract = mu[extract] - self.dE
@@ -327,71 +326,12 @@ def dict_to_matrix(D):
     return M
 
 
-# # https://journals.aps.org/prb/pdf/10.1103/PhysRevB.74.205438
-# def build_rate_matrix(sigmadict, beta, mu, A, integrate_method='approximate'):
-#     #          ___
-#     #         |     __                      
-#     #         |    \     _             _   
-#     #         |  -      |             |            --  
-#     #         |    /__     k0           01
-#     #         |        k!=0           __         
-#     #  W  =   |        _             \     _       --  
-#     #         |       |            -      |          
-#     #         |         10           /__     k1  
-#     #         |                          k!=1
-#     #         |       :                :          \
-#     integrate = attrgetter(integrate_method)
-#     sz, odd = np.divmod(len(sigmadict), 2)
-#     assert ~odd, """
-#         Invalid sigma list. Each matrix element must contain 
-#         its complex conjugate.
-#     """
-#     idF = sorted(set([idF for idF, _ in sigmadict.keys()]))
-#     map = {i:id for i,id in enumerate(idF)}
-#     sz = len(idF)
-#     W = np.zeros((sz, sz))
-#     for extract, inject in np.ndindex(2, 2):
-#         for i, f in np.ndindex(sz, sz):
-#             if i != f:
-#                 try:
-#                     gamma = 0.
-#                     for sigma in sigmadict[map[f],map[i]]:
-#                         gamma += integrate(sigma)(A, extract, inject, beta, mu)
-#                 except KeyError:
-#                     continue
-#                 W[i,i] -= gamma
-#                 W[f,i] += gamma
-#     return W
-
-
-# def build_transition_matrix(sigmadict, beta, mu, A, extract, inject, integrate_method='approximate'):
-#     sz, odd = np.divmod(len(sigmadict), 2)
-#     assert ~odd, """
-#         Invalid sigma list. Each matrix element must contain 
-#         its complex conjugate.
-#     """
-#     integrate = attrgetter(integrate_method)
-#     idF = sorted(set([idF for idF, _ in sigmadict.keys()]))
-#     map = {i:id for i,id in enumerate(idF)}
-#     sz = len(idF)
-#     T = np.zeros((sz, sz))
-#     for i, f in np.ndindex(sz, sz):
-#         try:
-#             gamma = 0.
-#             for sigma in sigmadict[map[f],map[i]]:
-#                 gamma += integrate(sigma)(A, extract, inject, beta, mu)
-#                 gamma -= integrate(sigma)(A, inject, extract, beta, mu)
-#         except KeyError:
-#             continue
-#         T[f,i] = gamma
-#     return T
-
-
 def screen_transition_elements(sigmadict, egs, espace, cutoff):
     sigmadict = {(idF,idI):sigmalist for (idF,idI),sigmalist in sigmadict.items()
                 if abs(sigmalist[0].dE)<cutoff
                 and(abs(espace[idF[:1]].eigvals[idF[1]]-egs)<cutoff)
                 and(abs(espace[idI[:1]].eigvals[idI[1]]-egs)<cutoff)}
+    # return sigmadict
     n = sigmadict[next(iter(sigmadict))][0].gf2[0].vF.shape[1]
     A = np.ones((2,n))
     screened = {}
@@ -413,8 +353,3 @@ def screen_transition_elements(sigmadict, egs, espace, cutoff):
         if sigmas: # list not empty
             screened[(idF,idI)] = sigmas
     return screened
-                
-    # return {(idF, idI):sigma for (idF, idI),sigma in sigmadict.items() 
-    #         if (abs(sigma[0].dE)<cutoff)
-    #         and(abs(espace[idF[:1]].eigvals[idF[1]]-egs)<cutoff)
-    #         and(abs(espace[idI[:1]].eigvals[idI[1]]-egs)<cutoff)}

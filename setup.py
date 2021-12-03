@@ -39,7 +39,7 @@ requires = {
         "setuptools",
         "cython",
         "mpmath",
-        "numpy >= " + "1.19",
+        "numpy >= " + "1.19" + ", <= 1.20",
         "scipy >= " + "1.6",
         "numba >= " + "0.51",
         "ase",
