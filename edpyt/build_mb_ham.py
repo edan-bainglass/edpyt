@@ -1,4 +1,5 @@
 import numpy as np
+from warnings import warn
 # Compiled
 from numba import njit, prange
 from numba.types import float64, uint32, Array
@@ -62,11 +63,11 @@ def build_mb_ham(H, V, sct, comm=None):
     
     operators = list()
     
-    operators.append(build_ham_local(H, U, sct, hfmode=params['hfmode'], mu=params['mu']))
-    try:
+    operators.append(build_ham_local(H, U, sct, hfmode=params['hfmode'], mu=params['mu'], z=params['z']))
+    if isinstance(sct.states, np.ndarray):
+        warn("Hopping with N symmetry not implmented. Discarding off-diagonal elements.")
+    elif len(U)>1:
         operators.extend(build_ham_hopping(H, sct))
-    except NotImplementedError:
-        pass
     if (Jx is not None) or (Jp is not None):
         operators.append(build_ham_non_local(Jx, Jp, sct, operators[0]))
 

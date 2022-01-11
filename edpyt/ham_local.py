@@ -12,10 +12,11 @@ from edpyt.shared import unsigned_one as uone, unsiged_dt
        Array(uint32, 1, 'C'),
        Array(uint32, 1, 'C'),
        Array(float64, 1, 'C'),
+       Array(float64, 1, 'C'),
        boolean,
        float64),
       parallel=True,cache=True)
-def _build_ham_local(H, V, states_up, states_dw, vec_diag, hfmode=False, mu=0.):
+def _build_ham_local(H, V, states_up, states_dw, vec_diag, z, hfmode=False, mu=0.):
     # ___                                   ___                              ___                             
     # \         e  (  n    +  n     )   +   \         U    n     n      +    \        (  n    +  n     ) V    (  n    +  n     )     
     # /__        i     i,up     i,dw        /__        i    i,up  i,dw       /__          i,up    i,dw     ij     j,up    j,dw  
@@ -55,15 +56,15 @@ def _build_ham_local(H, V, states_up, states_dw, vec_diag, hfmode=False, mu=0.):
                     res += (nup[i]-0.5)*(ndw[i]-0.5)*Vi[i]
                     tmp = 0.
                     for j in range(n):
-                        tmp += Vij[i,j]*(nup[j]+ndw[j]-1.)
-                    res += 0.5 * (nup[i]+ndw[i]-1.) * tmp
+                        tmp += Vij[i,j]*(nup[j]+ndw[j]-z[j])
+                    res += 0.5 * (nup[i]+ndw[i]-z[i]) * tmp
             else:
                 for i in range(n):
                     res += nup[i]*ndw[i]*Vi[i]
                     tmp = 0.
                     for j in range(n):
-                        tmp += Vij[i,j]*(nup[j]+ndw[j])
-                    res += 0.5 * (nup[i]+ndw[i]) * tmp
+                        tmp += Vij[i,j]*(nup[j]+ndw[j]-z[j])
+                    res += 0.5 * (nup[i]+ndw[i]-z[i]) * tmp
             vec_diag[iup+idw*dup] = res
 
 
@@ -71,10 +72,11 @@ def _build_ham_local(H, V, states_up, states_dw, vec_diag, hfmode=False, mu=0.):
        Array(float64, 2, 'C'),
        Array(uint32, 1, 'C'),
        Array(float64, 1, 'C'),
+       Array(float64, 1, 'C'),
        boolean,
        float64),
       parallel=True,cache=True)
-def _N_build_ham_local(H, V, states, vec_diag, hfmode=False, mu=0.):
+def _N_build_ham_local(H, V, states, vec_diag, z, hfmode=False, mu=0.):
     # ___                                   ___                              ___                             
     # \         e  (  n    +  n     )   +   \         U    n     n      +    \        (  n    +  n     ) V    (  n    +  n     )     
     # /__        i     i,up     i,dw        /__        i    i,up  i,dw       /__          i,up    i,dw     ij     j,up    j,dw  
@@ -112,25 +114,30 @@ def _N_build_ham_local(H, V, states, vec_diag, hfmode=False, mu=0.):
                 res += (nup[i]-0.5)*(ndw[i]-0.5)*Vi[i]
                 tmp = 0.
                 for j in range(n):
-                    tmp += Vij[i,j]*(nup[j]+ndw[j]-1.)
-                res += 0.5 * (nup[i]+ndw[i]-1.) * tmp
+                    tmp += Vij[i,j]*(nup[j]+ndw[j]-z[j])
+                res += 0.5 * (nup[i]+ndw[i]-z[i]) * tmp
         else:
             for i in range(n):
                 res += nup[i]*ndw[i]*Vi[i]
                 tmp = 0.
                 for j in range(n):
-                    tmp += Vij[i,j]*(nup[j]+ndw[j])
-                res += 0.5 * (nup[i]+ndw[i]) * tmp
+                    tmp += Vij[i,j]*(nup[j]+ndw[j]-z[j])
+                res += 0.5 * (nup[i]+ndw[i]-z[i]) * tmp
         vec_diag[idu] = res
 
 
-def build_ham_local(H, V, sct, hfmode=False, mu=0.):
+def build_ham_local(H, V, sct, hfmode=False, mu=0., z=None):
+    if z is None:
+        if hfmode:
+            z = np.ones(H.shape[-1])
+        else:
+            z = np.zeros(H.shape[-1])
     """Build local Hamiltonian."""
     vec_diag = np.zeros(sct.d)
     if hasattr(sct.states, 'up'):
-        _build_ham_local(H, V, sct.states.up, sct.states.dw, vec_diag, hfmode, mu)
+        _build_ham_local(H, V, sct.states.up, sct.states.dw, vec_diag, z, hfmode, mu)
     else:
-        _N_build_ham_local(H, V, sct.states, vec_diag, hfmode, mu)
+        _N_build_ham_local(H, V, sct.states, vec_diag, z, hfmode, mu)
     return vec_diag.view(Local)
 
 
