@@ -99,15 +99,40 @@ def integrate_gf(gf, mu=0, T=300, nzp=100, R=1e10):
     return rho/2.
 
 
-def matsum_gf(gf, nmats=100, beta=10.):
-    zp, Rp = zero_fermi(nmats)
-    a_p = 1j*zp/beta # poles
-    # gf @ poles.
-    gf_p = gf(a_p)
-    if gf_p.ndim<2:
-        gf_p = gf_p[None,:]
-    mu_0 = a_p[-1] * gf_p[:,-1]
-    mu_1 = -4.j/beta * (gf_p * Rp).sum(-1) # sum over matsubara.
-    rho = np.real(mu_0) + np.imag(mu_1)
-    return rho/2.
+# def matsum_gf(gf, nmats=100, beta=10.):
+#     zp, Rp = zero_fermi(nmats)
+#     a_p = 1j*zp/beta # poles
+#     # gf @ poles.
+#     gf_p = gf(a_p)
+#     if gf_p.ndim<3:
+#         gf_p = np.resize(gf_p, (gf_p.shape[0],2,gf_p.shape[1]))
+#     mu_0 = a_p[-1] * gf_p[...,-1]
+#     mu_1 = -4.j/beta * (gf_p * Rp[None,None,:]).sum(-1) # sum over matsubara.
+#     rho = np.real(mu_0) + np.imag(mu_1)
+#     return rho/2.
+
+def matsum_gf(gf, mu=0., nmats=3000, beta=70.):
     
+    mu_old = gf.mu
+    gf.mu = mu
+    
+    z = 1.j*(2*np.arange(nmats)+1)*np.pi/beta
+    w2 = z.imag**2
+    gf_z  = gf(z)
+    mu = - gf_z[...,-1].real * w2[-1]
+    mu2 = mu**2
+    
+    s = np.zeros_like(mu2)
+    for i in range(z.size):
+        tail = - (mu + z[i]) / (mu2+w2[i])
+        s += (gf_z[...,i]-tail).real
+        
+    with np.errstate(over='ignore'):
+        At = -1./(1.+np.exp(-beta*mu))
+    # if np.any((mu*beta) >  30.): At = -1.
+    # if np.any((mu*beta) < -30.): At = -np.exp(mu*beta)
+    n = s * 2. / beta + At + 1.
+    
+    gf.mu = mu_old
+    
+    return n

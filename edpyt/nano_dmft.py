@@ -1,6 +1,6 @@
 import numpy as np
 
-from edpyt.integrate_gf import integrate_gf
+from edpyt.integrate_gf import matsum_gf as integrate_gf
 from edpyt.observs import get_occupation
 # from edpyt.dmft import _DMFT, adjust_mu
 

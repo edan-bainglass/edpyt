@@ -1,7 +1,7 @@
 from warnings import warn
 
 import numpy as np
-from scipy.optimize import root_scalar, broyden1
+from scipy.optimize import root_scalar, broyden1, linearmixing
 
 from edpyt.integrate_gf import integrate_gf
 # from edpyt.fit import Delta, set_initial_bath
@@ -18,8 +18,9 @@ def adjust_mu(gf, occupancy_goal, bracket=(-20.,20)):
     (z+mu-Delta(z)-Sigma(z))^-1. Here, `distance` returns
     the change in mu required to satisfy the occupancy goal.
     """
-    distance = lambda mu: np.sum(gf.integrate(mu)-occupancy_goal)
-    return root_scalar(distance, bracket=bracket, method='brentq').root + gf.mu
+    # distance = lambda mu: np.sum(gf.integrate(mu)-occupancy_goal)
+    distance = lambda mu: gf.integrate(mu).sum()-occupancy_goal.sum()
+    return root_scalar(distance, bracket=bracket, method='brentq').root #+ gf.mu
 
 
 class Converged(Exception):
@@ -410,7 +411,7 @@ class DMFT:
     def step(self, delta):
         if self.adjust_mu:
             dmft_step_adjust(delta, self.gfimp, self.gfloc, self.occupancy_goal)
-            occp = self.gfloc.integrate()
+            occp = self.gfloc.integrate(self.gfloc.mu)
         else:
             dmft_step(delta, self.gfimp, self.gfloc)
             occp = self.occupancy_goal
@@ -441,11 +442,9 @@ class DMFT:
         broyden1(self.distance, delta, alpha=alpha, reduction_method="svd", 
                 max_rank=10, verbose=verbose, f_tol=1e-99, callback=callback) # Loop forever (small f_tol!)
 
-    def solve_with_linear_mixing(self, delta, alpha=0.5):
-        delta_in = delta
-        while True:
-            delta_out = self(delta)
-            delta_in = alpha * delta_out + (1-alpha) * delta_in
+    def solve_with_linear_mixing(self, delta, iter=60, alpha=0.2, callback=None):
+        linearmixing(self.distance, delta,
+                     iter=iter, alpha=alpha, callback=callback)
 
     def solve(self, delta, mixing_method='broyden', **kwargs):
         """'linear' or 'broyden' mixing 

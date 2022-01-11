@@ -132,7 +132,7 @@ class Gfimp:
 
 
 @njit()
-def get_occupation(vector, states, pos):
+def get_occupation(vector, states_up, states_dw, pos):
     """Count particles in eigen-state vector (size=dup x dwn).
 
     """
