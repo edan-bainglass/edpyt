@@ -11,6 +11,7 @@ from edpyt.tridiag import (
     eigh_tridiagonal,
 )
 
+np.random.seed(1234)
 
 n = 30
 d = np.random.random(n)
