@@ -148,7 +148,7 @@ class Gfimp:
         """Solve impurity model and set interacting green's function."""
         H, V = self.H, self.V
         espace, egs = build_espace(H, V, self.neig)
-        screen_espace(espace, egs)
+        screen_espace(espace, egs, beta=self.beta)
         if self.adjust_neig:
             adjust_neigsector(espace, self.neig, self.n)
         self.gf = build_gf_lanczos(H, V, espace, self.beta, egs, repr='sp', ispin=self.spin)
@@ -232,7 +232,7 @@ class SpinGfimp:
         """Solve impurity model and set interacting green's function."""
         H, V = self.H, self.V
         espace, egs = build_espace(H, V, self.neig)
-        screen_espace(espace, egs)
+        screen_espace(espace, egs, beta=self.beta)
         if self.adjust_neig:
             adjust_neigsector(espace, self.neig, self.n)
         for gf in self:
