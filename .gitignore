@@ -13,3 +13,4 @@ ipynbs
 .vscode
 edpyt.egg-info/
 __pycache__
+build/
