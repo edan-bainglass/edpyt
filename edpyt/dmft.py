@@ -13,27 +13,31 @@ from edpyt.integrate_gf import integrate_gf
 
 def adjust_mu(gf, occupancy_goal, bracket=(-20.0, 20)):
     """Get the chemical potential to obtain the occupancy goal.
-    
+
     NOTE : The gf is supposed to have the general form
     (z+mu-Delta(z)-Sigma(z))^-1. Here, `distance` returns
     the change in mu required to satisfy the occupancy goal.
     """
     # distance = lambda mu: np.sum(gf.integrate(mu)-occupancy_goal)
     distance = lambda mu: gf.integrate(mu).sum() - occupancy_goal.sum()
-    return root_scalar(distance, bracket=bracket, method="brentq").root  # + gf.mu
+    return root_scalar(distance, bracket=bracket,
+                       method="brentq").root  # + gf.mu
 
 
 class Converged(Exception):
+
     def __init__(self, message):
         self.message = message
 
 
 class FailedToConverge(Exception):
+
     def __init__(self, message):
         self.message = message
 
 
 class Delta:
+
     def __init__(self, nbath, nmats, beta) -> None:
         self.nbath = nbath
         self.nmats = nmats
@@ -46,11 +50,11 @@ class Delta:
 
     @property
     def ek(self):
-        return self.x[: self.nbath]
+        return self.x[:self.nbath]
 
     @property
     def vk(self):
-        return self.x[self.nbath :]
+        return self.x[self.nbath:]
 
     def fit(self, delta):
         fit_hybrid(self.x, self.nmats, delta, self.beta)
@@ -79,9 +83,14 @@ class Gfimp:
     #   |  v1     e1     |
     #   |   .        .   |
     #   |   .          . |
-    def __init__(
-        self, n, nmats=3000, U=3.0, beta=1e6, neig=None, adjust_neig=False, spin=0
-    ):
+    def __init__(self,
+                 n,
+                 nmats=3000,
+                 U=3.0,
+                 beta=1e6,
+                 neig=None,
+                 adjust_neig=False,
+                 spin=0):
         self.n = n
         self.Delta = Delta(n - 1, nmats, beta)
         self.spin = spin
@@ -113,7 +122,7 @@ class Gfimp:
         #                /__k = 0      z - ek
         self.Delta.fit(delta)
         self.H[1:, 0] = self.H[0, 1:] = self.Delta.vk
-        self.H.flat[(self.n + 1) :: (self.n + 1)] = self.Delta.ek
+        self.H.flat[(self.n + 1)::(self.n + 1)] = self.Delta.ek
 
     def update(self, mu):
         """Update chemical potential."""
@@ -146,7 +155,8 @@ class Gfimp:
         #                  -1            -1
         #  Sigma(z)    =  g (z)     -   g (z)
         #                  0
-        return self.free(z, inverse=True) - np.reciprocal(self.gf(z.real, z.imag))
+        return self.free(z, inverse=True) - np.reciprocal(
+            self.gf(z.real, z.imag))
 
     def solve(self):
         """Solve impurity model and set interacting green's function."""
@@ -155,9 +165,13 @@ class Gfimp:
         screen_espace(espace, egs)  # , beta=self.beta)
         if self.adjust_neig:
             adjust_neigsector(espace, self.neig, self.n)
-        self.gf = build_gf_lanczos(
-            H, V, espace, self.beta, egs, repr="sp", ispin=self.spin
-        )
+        self.gf = build_gf_lanczos(H,
+                                   V,
+                                   espace,
+                                   self.beta,
+                                   egs,
+                                   repr="sp",
+                                   ispin=self.spin)
         self.espace = espace
         self.egs = egs
 
@@ -176,7 +190,7 @@ class SpinGfimp:
 
     The up and down green's functions point to the sub-Hamiltonians of this
     green's function, i.e. up points to H[0] and down to H[1]. When calling
-    fit and/or update, the up & down green's function will fill their respective 
+    fit and/or update, the up & down green's function will fill their respective
     H's matrix elements. However, the impurity model is solved simultaneously by
     passing H[:,:,:] and V[:,:] to build_espace and the spin dependent
     green's functions are built separately from the same espace.
@@ -184,7 +198,13 @@ class SpinGfimp:
     NOTE: Arrays of this class have the general shape = (2, z.size)
     """
 
-    def __init__(self, n, nmats=3000, U=3.0, beta=1e6, neig=None, adjust_neig=False):
+    def __init__(self,
+                 n,
+                 nmats=3000,
+                 U=3.0,
+                 beta=1e6,
+                 neig=None,
+                 adjust_neig=False):
         self.H = np.zeros((2, n, n))
         self.gfimp = [None, None]
         # Build gfimp's for each spin and make them point to self.H[spin].
@@ -242,7 +262,13 @@ class SpinGfimp:
         if self.adjust_neig:
             adjust_neigsector(espace, self.neig, self.n)
         for gf in self:
-            gf.gf = build_gf_lanczos(H, V, espace, self.beta, egs, repr="sp", ispin=gf.spin)
+            gf.gf = build_gf_lanczos(H,
+                                     V,
+                                     espace,
+                                     self.beta,
+                                     egs,
+                                     repr="sp",
+                                     ispin=gf.spin)
         self.espace = espace
         self.egs = egs
 
@@ -275,21 +301,46 @@ class Gfloc:
         """Set impurity self-energy to local self-energy!"""
         self.Sigma = Sigma
 
-    def Delta(self, z):
-        """Hybridization."""
-        #                               -1
-        # Delta(z) = z+mu - Sigma(z) - g (z)
-        #
+    def Delta(self, z: complex) -> complex:
+        """Calculates local hybridization according to Eq. 1.74 in Guido's thesis.
+        .. math::
+        \Delta(z) = z + \mu - \Sigma(z) - G(z)^{-1}
+
+        Parameters
+        ----------
+        `z` : `complex`
+            #UNKNOWN Energy but in the complex plane?
+
+        Returns
+        -------
+        `complex`
+        .. math::
+        \Delta(z)
+        """
         return z + self.mu - self.Weiss(z)
 
-    def Weiss(self, z):
-        """Weiss filed."""
+    def Weiss(self, z: complex) -> complex:
+        """Calculates the Weiss field given by
+
+        .. math::
+        \Sigma(z) + G(z)^{-1}
+
+        Parameters
+        ----------
+        `z` : `complex`
+            #UNKNOWN Energy but in the complex plane?
+
+        Returns
+        -------
+        `complex`
+           Weiss field
+        """
         gloc_inv = self(z, inverse=True)
         return self.Sigma(z) + gloc_inv
 
 
 # Analytical Bethe lattice
-_ht = lambda z: 2 * (z - 1j * np.sign(z.imag) * np.sqrt(1 - z ** 2))
+_ht = lambda z: 2 * (z - 1j * np.sign(z.imag) * np.sqrt(1 - z**2))
 eps = 1e-20
 ht = lambda z: _ht(z.real + 1.0j * (z.imag if z.imag > 0.0 else eps))
 
@@ -355,7 +406,7 @@ def dmft_step(delta, gfimp, gfloc):
 
 
 def dmft_step_adjust(delta, gfimp, gfloc, occupancy_goal):
-    """Perform a DMFT self-consistency step and adjust chemical potential to 
+    """Perform a DMFT self-consistency step and adjust chemical potential to
     target occupation (for both local and impurity green's functions."""
     dmft_step(delta, gfimp, gfloc)
     mu = adjust_mu(gfloc, occupancy_goal)
@@ -373,21 +424,21 @@ def dmft_step_magnetic(delta, gfimp, gfloc, sign, field):
 
 class DMFT:
     """Base class for DMFT self-consistent loop.
-    
+
     Sub classes can overwrite the methods:
         - initialize
         - step
         - distance
 
     methods must:
-        - initialize 
+        - initialize
             call   : -
             return : initial guess
-        - step 
+        - step
             call   : -
-            return : the current occupation and a new guess for the next iteration. 
-        - distance 
-            call   : __call__ 
+            return : the current occupation and a new guess for the next iteration.
+        - distance
+            call   : __call__
             return : the error w.r.t. the previous iteration
     """
 
@@ -396,10 +447,10 @@ class DMFT:
         gfimp,
         gfloc,
         occupancy_goal=None,
-        max_iter=20,
-        tol=1e-3,
-        adjust_mu=False,
-        alpha=0.0,
+        max_iter: int = 20,
+        tol: float = 1e-3,
+        adjust_mu: bool = False,
+        alpha: float = 0.0,
     ):
         self.gfimp = gfimp
         self.gfloc = gfloc
@@ -411,7 +462,7 @@ class DMFT:
         self.z = 1.0j * wn
         self.delta = None
         self.adjust_mu = adjust_mu
-        self.weights = wn ** -alpha
+        self.weights = wn**-alpha
 
     def initialize(self, U, Sigma, mu=None):
         if mu is None:
@@ -429,7 +480,8 @@ class DMFT:
 
     def step(self, delta):
         if self.adjust_mu:
-            dmft_step_adjust(delta, self.gfimp, self.gfloc, self.occupancy_goal)
+            dmft_step_adjust(delta, self.gfimp, self.gfloc,
+                             self.occupancy_goal)
             occp = self.gfloc.integrate(self.gfloc.mu)
         else:
             dmft_step(delta, self.gfimp, self.gfloc)
@@ -448,8 +500,8 @@ class DMFT:
         delta[non_causal].imag = -1e-20
         occp, delta_new = self.step(delta)
         print(
-            f"Occupation : {occp:.5f} Chemical potential : {self.gfloc.mu:.5f}", end=" "
-        )
+            f"Occupation : {occp:.5f} Chemical potential : {self.gfloc.mu:.5f}",
+            end=" ")
         eps = np.linalg.norm(delta_new - delta)
         print(f"Error : {eps:.5f}")
         if eps < self.tol:
@@ -459,7 +511,11 @@ class DMFT:
             raise FailedToConverge("Failed to converge!")
         return delta_new
 
-    def solve_with_broyden_mixing(self, delta, alpha=0.5, verbose=True, callback=None):
+    def solve_with_broyden_mixing(self,
+                                  delta,
+                                  alpha=0.5,
+                                  verbose=True,
+                                  callback=None):
         broyden1(
             self.distance,
             delta,
@@ -471,13 +527,21 @@ class DMFT:
             callback=callback,
         )  # Loop forever (small f_tol!)
 
-    def solve_with_linear_mixing(self, delta, iter=60, alpha=0.2, callback=None):
-        linearmixing(self.distance, delta, iter=iter, alpha=alpha, callback=callback)
+    def solve_with_linear_mixing(self,
+                                 delta,
+                                 iter=60,
+                                 alpha=0.2,
+                                 callback=None):
+        linearmixing(self.distance,
+                     delta,
+                     iter=iter,
+                     alpha=alpha,
+                     callback=callback)
 
     def solve(self, delta, mixing_method="broyden", **kwargs):
-        """'linear' or 'broyden' mixing 
+        """'linear' or 'broyden' mixing
         the quantity being mixed is the hybridisation function
-        
+
         """
         if mixing_method == "linear":
             self.solve_with_linear_mixing(delta, **kwargs)
