@@ -518,7 +518,7 @@ class DMFT:
         if eps < self.tol:
             raise Converged("Converged!")
         self.it += 1
-        if self.it > self.max_iter:
+        if self.it >= self.max_iter:
             raise FailedToConverge("Failed to converge!")
         return delta_new
 
