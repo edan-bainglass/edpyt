@@ -75,17 +75,29 @@ class Gfloc:
 
     def __call__(self, z):
         """Interacting Green's function."""
-        z = np.atleast_1d(z)
-        sigma = self.get_sigma(z)
-        it = np.nditer([sigma, z, None], flags=['external_loop'], order='F')
-        with it:
-            for sigma_, z_, out in it:
-                x = self.free(z_[0], inverse=True)
-                x.flat[::(self.n+1)] -= sigma_[self.idx_inv]
-                out[self.idx_neq,...] = np.linalg.inv(x).diagonal()[self.idx_neq]
-            return it.operands[2][self.idx_neq,...]
-                # out[self.idx_world,...] = np.linalg.inv(x).diagonal()[self.idx_neq]
-            # return it.operands[2][self.idx_world,...]
+
+        cs = 50  # chunk size
+        nc = len(z) // cs  # number of chunks
+        result = []
+
+        n2 = self.n * self.n
+
+        for i in range(nc):
+            start = i * cs
+            end = (i + 1) * cs
+            z_chunk = z[start:end]
+
+            sigma = self.get_sigma(z_chunk).T  # cs x n
+            x = self.free(z_chunk, inverse=True)  # cs x n x n
+            x_flat = x.reshape(cs, n2)  # cs x n^2
+            x_flat[:, ::(self.n + 1)] -= sigma
+            x = x_flat.reshape(cs, self.n, self.n)  # cs x n x n
+            inv_diagonal = np.linalg.inv(x).diagonal(0, 1, 2)  # cs x n
+            result.append(inv_diagonal[:, self.idx_neq])
+
+        result = np.array(result)  # nc x cs x n
+
+        return result.reshape(len(z), self.n).T  # len(z) x n
 
     def update(self, mu):
         """Update chemical potential."""
@@ -126,8 +138,9 @@ class Gfloc:
         """Non-interacting green's function."""
         #                                       -1
         #  g (z) = ((z + mu)*S - H - Hybrid(z))
-        #   0      
-        g0_inv = (z+self.mu)*self.S-self.H-self.Hybrid(z)
+        #   0
+        z_b = z[:, nax, nax]  # for broadcasting
+        g0_inv = (z_b + self.mu) * self.S - self.H - self.Hybrid(z)
         if inverse:
             return g0_inv
         return np.linalg.inv(g0_inv)
