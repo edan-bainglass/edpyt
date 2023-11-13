@@ -4,6 +4,8 @@ from edpyt.integrate_gf import matsum_gf as integrate_gf
 from edpyt.observs import get_occupation
 # from edpyt.dmft import _DMFT, adjust_mu
 
+nax = np.newaxis
+
 
 def _get_sigma_method(comm):
     if comm is not None:
@@ -114,17 +116,10 @@ class Gfloc:
         """Hybridization."""
         #                                       -1
         # Delta(z) = z+mu - Sigma(z) - ( G (z) )
-        #                                 ii
+        #
         z = np.atleast_1d(z)
         weiss = self.Weiss(z)
-        ndim = weiss.ndim-1
-        it = np.nditer([self.ed, weiss, z, None], 
-                        op_axes=[[0]+[-1]*ndim,None,[-1]*ndim+[0],None], 
-                        flags=['external_loop'], order='F')
-        with it:
-            for ed, weiss, z, out in it:
-                out[...] = z+self.mu-ed-weiss
-            return it.operands[3]
+        return (z[:, nax] + self.mu - self.ed - weiss.T).T
 
     def Weiss(self, z):
         """Weiss field."""
