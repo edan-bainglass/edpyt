@@ -1,5 +1,8 @@
+import dill
 import numpy as np
+from mpi4py import MPI
 
+from edpyt.dmft import Gfimp as SingleGfimp
 from edpyt.integrate_gf import matsum_gf as integrate_gf
 from edpyt.observs import get_occupation
 # from edpyt.dmft import _DMFT, adjust_mu
@@ -161,8 +164,12 @@ class Gfloc:
 
 class Gfimp:
 
-    def __init__(self, gfimp) -> None:
+    def __init__(self, gfimp: list[SingleGfimp]) -> None:
         self.gfimp = gfimp
+        self.comm = MPI.COMM_WORLD
+        self.rank = self.comm.Get_rank()
+        self.ntasks = self.comm.Get_size()
+        self.wait = self.comm.barrier
 
     @property
     def nmats(self):
@@ -210,6 +217,48 @@ class Gfimp:
         for gf in self:
             gf.solve()
 
+    def solve(self):
+        """Generate Green's functions for impurities.
+
+        MPI enabled:
+        - Splits impurities to `ntasks` chunks
+        - Computes Green's functions for assigned impurities
+        - Broadcasts results across `comm` group.
+        """
+        num_chunks = len(self) // self.ntasks
+        if len(self) % self.ntasks:
+            num_chunks += 1
+        for i in range(num_chunks):
+            index = self.rank + i * self.ntasks
+            if index < len(self):
+                self[index].solve()
+                self.bcast(self[index], "gf")
+                self.bcast(self[index], "espace")
+                self.bcast(self[index], "egs")
+        self.wait()
+
+    def bcast(self, gfimp: SingleGfimp, attr: str):
+        """Broadcast `gfimp` attribute across comm group.
+
+        Uses `dill` to (de)serialize the attribute.
+
+        Parameters
+        ----------
+        `gfimp` : `SingleGfimp`
+            The `gfimp` object.
+        `attr` : `str`
+            The attribute to broadcast.
+        """
+        setattr(
+            gfimp,
+            attr,
+            dill.loads(
+                self.comm.bcast(
+                    dill.dumps(getattr(gfimp, attr)),
+                    self.rank,
+                )),
+        )
+
     def spin_symmetrize(self):
         for gf in self:
             gf.spin_symmetrize()
@@ -222,7 +271,7 @@ class Gfimp:
                 gf.espace,gf.egs,self.beta,self.n))
         return nup-ndw
 
-    def __getitem__(self, i):
+    def __getitem__(self, i: int) -> SingleGfimp:
         return self.gfimp[i]
 
     def __len__(self):
