@@ -227,11 +227,15 @@ class Gfimp:
     def spin_symmetrize(self):
         for gf in self:
             gf.spin_symmetrize()
-            
+
     def get_local_moments(self):
         nup = np.zeros(len(self))
         ndw = np.zeros(len(self))
         for i, gf in enumerate(self.gfimp):
+            nup[i], ndw[i] = map(
+                lambda m: m[0],
+                get_occupation(gf.espace, gf.egs, self.beta, self.n))
+        return nup - ndw
 
     def _get_chunk(self) -> list[SingleGfimp]:
         """Return an MPI-RANK/SIZE-dependent chunk of impurities.
