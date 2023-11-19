@@ -4,6 +4,7 @@ from edpyt.dmft import Gfimp as SingleGfimp
 from edpyt.integrate_gf import matsum_gf as integrate_gf
 from edpyt.mpi import COMM, RANK, SIZE
 from edpyt.observs import get_occupation
+
 # from edpyt.dmft import _DMFT, adjust_mu
 
 nax = np.newaxis
@@ -11,34 +12,48 @@ nax = np.newaxis
 
 def _get_sigma_method(comm):
     if comm is not None:
+
         def wrap(self, z):
             # Collect sigmas and expand to non equivalent indices.
             comm = self.comm
             sigma_loc = self.Sigma(z)
-            sigma = np.empty(comm.size*sigma_loc.size, sigma_loc.dtype)
-            comm.Allgather([sigma_loc, sigma_loc.size], [sigma, sigma_loc.size])
+            sigma = np.empty(comm.size * sigma_loc.size, sigma_loc.dtype)
+            comm.Allgather(
+                [sigma_loc, sigma_loc.size],
+                [sigma, sigma_loc.size],
+            )
             shape = list(sigma_loc.shape)
             shape[0] *= comm.size
             return sigma.reshape(shape)
+
     else:
+
         def wrap(self, z):
             return self.Sigma(z)
+
     return wrap
 
 
 def _get_occps_method(comm):
     if comm is not None:
+
         def wrap(self, mu):
             occps_loc = integrate_gf(self, mu)
-            occps = np.empty(occps_loc.size*self.comm.size, occps_loc.dtype)
-            self.comm.Allgather([occps_loc, occps_loc.size], [occps, occps_loc.size])
+            occps = np.empty(occps_loc.size * self.comm.size, occps_loc.dtype)
+            self.comm.Allgather(
+                [occps_loc, occps_loc.size],
+                [occps, occps_loc.size],
+            )
             shape = list(occps_loc.shape)
             shape[0] *= self.comm.size
-            return np.squeeze(occps.reshape(shape)[self.idx_inv,...])
+            return np.squeeze(occps.reshape(shape)[self.idx_inv, ...])
+
     else:
+
         def wrap(self, mu):
             occps = integrate_gf(self, mu)
-            return np.squeeze(occps[self.idx_inv,...])
+            return np.squeeze(occps[self.idx_inv, ...])
+
     return wrap
 
 
@@ -46,8 +61,8 @@ def _get_idx_world(comm, n):
     if comm is None:
         return slice(None)
     else:
-        stride = n//comm.size
-        return slice(comm.rank*stride,(comm.rank+1)*stride)
+        stride = n // comm.size
+        return slice(comm.rank * stride, (comm.rank + 1) * stride)
 
 
 class Gfloc:
@@ -61,13 +76,14 @@ class Gfloc:
         idx_neq : the indices of the input array that give the unique values
         idx_inv : the indices of the unique array that reconstruct the input array
     """
+
     def __init__(self, H, S, Hybrid, idx_neq, idx_inv, comm=None) -> None:
         self.n = H.shape[-1]
         self.H = H
         self.S = S
         self.Hybrid = Hybrid
         self.idx_world = _get_idx_world(comm, len(idx_neq))
-        self.idx_neq = idx_neq[self.idx_world]#_get_idx_world(comm, len(idx_neq))]
+        self.idx_neq = idx_neq[self.idx_world]
         self.idx_inv = idx_inv
         self.comm = comm
         self.get_sigma = _get_sigma_method(comm).__get__(self)
@@ -129,7 +145,7 @@ class Gfloc:
         # G     (z) = Sigma(z) + ( G (z) )
         #  0,ii                     ii
         gloc_inv = np.reciprocal(self(z))
-        return gloc_inv+self.Sigma(z)
+        return gloc_inv + self.Sigma(z)
 
     def free(self, z, inverse=False):
         """Non-interacting green's function."""
@@ -156,9 +172,9 @@ class Gfloc:
         # else:
         #     occps = occps_loc
         # occps = np.squeeze(occps[self.idx_inv,...])
-        if occps.ndim<2:
-            return 2. * occps#.sum()
-        return occps.sum(1)#.sum()
+        if occps.ndim < 2:
+            return 2. * occps  # .sum()
+        return occps.sum(1)  # .sum()
 
 
 class Gfimp:
