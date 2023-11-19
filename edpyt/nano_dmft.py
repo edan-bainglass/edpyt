@@ -217,8 +217,26 @@ class Gfimp:
 
     def fit(self, delta):
         """Fit discrete bath."""
-        for i, gf in enumerate(self):
+
+        start, end = self._get_chunk_indices()
+        chunk = self[start:end]
+
+        for i, gf in enumerate(chunk, start):
             gf.fit(delta[i])
+
+        all_x = np.concatenate(
+            COMM.allgather([impurity.x for impurity in chunk]),
+            axis=0,
+        )
+
+        all_H = np.concatenate(
+            COMM.allgather([impurity.H for impurity in chunk]),
+            axis=0,
+        )
+
+        for i, impurity in enumerate(self):
+            impurity.Delta.x = all_x[i]
+            impurity.H = all_H[i]
 
     def Sigma(self, z):
         """Correlated self-energy."""
