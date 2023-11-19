@@ -227,7 +227,8 @@ class Gfimp:
     def solve(self):
         """Generate Green's functions for impurities."""
 
-        chunk = self._get_chunk()
+        start, end = self._get_chunk_indices()
+        chunk = self[start:end]
 
         for impurity in chunk:
             impurity.solve()
@@ -253,18 +254,18 @@ class Gfimp:
                 get_occupation(gf.espace, gf.egs, self.beta, self.n))
         return nup - ndw
 
-    def _get_chunk(self) -> list[SingleGfimp]:
-        """Return an MPI-RANK/SIZE-dependent chunk of impurities.
+    def _get_chunk_indices(self) -> tuple[int, int]:
+        """Return (start, end) chunk indices.
 
         Returns
         -------
-        `list[SingleGfimp]`
-            A chunk of impurities.
+        `tuple[int, int]`
+            The start and end indices of the impurities chunk.
         """
         chunk_size = len(self) // SIZE
         start = RANK * chunk_size
         end = start + chunk_size if RANK < SIZE - 1 else len(self)
-        return self[start:end]
+        return start, end
 
     def __getitem__(self, i: int) -> SingleGfimp:
         return self.gfimp[i]
