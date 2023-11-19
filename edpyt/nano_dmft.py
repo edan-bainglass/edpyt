@@ -233,13 +233,25 @@ class Gfimp:
         for impurity in chunk:
             impurity.solve()
 
-        all_gfs = np.concatenate(
+        all_gf = np.concatenate(
             COMM.allgather([impurity.gf for impurity in chunk]),
             axis=0,
         )
 
-        for impurity, gf in zip(self, all_gfs):
-            impurity.gf = gf
+        all_espace = np.concatenate(
+            COMM.allgather([impurity.espace for impurity in chunk]),
+            axis=0,
+        )
+
+        all_egs = np.concatenate(
+            COMM.allgather([impurity.egs for impurity in chunk]),
+            axis=0,
+        )
+
+        for i, impurity in enumerate(self):
+            impurity.gf = all_gf[i]
+            impurity.espace = all_espace[i]
+            impurity.egs = all_egs[i]
 
     def spin_symmetrize(self):
         for gf in self:
