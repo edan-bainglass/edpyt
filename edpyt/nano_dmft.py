@@ -1,9 +1,8 @@
-import dill
 import numpy as np
-from mpi4py import MPI
 
 from edpyt.dmft import Gfimp as SingleGfimp
 from edpyt.integrate_gf import matsum_gf as integrate_gf
+from edpyt.mpi import COMM, RANK, SIZE
 from edpyt.observs import get_occupation
 # from edpyt.dmft import _DMFT, adjust_mu
 
@@ -166,10 +165,6 @@ class Gfimp:
 
     def __init__(self, gfimp: list[SingleGfimp]) -> None:
         self.gfimp = gfimp
-        self.comm = MPI.COMM_WORLD
-        self.rank = self.comm.Get_rank()
-        self.ntasks = self.comm.Get_size()
-        self.wait = self.comm.barrier
 
     @property
     def nmats(self):
@@ -214,50 +209,20 @@ class Gfimp:
         return np.stack([gf.Sigma(z) for gf in self])
 
     def solve(self):
-        for gf in self:
-            gf.solve()
+        """Generate Green's functions for impurities."""
 
-    def solve(self):
-        """Generate Green's functions for impurities.
+        chunk = self._get_chunk()
 
-        MPI enabled:
-        - Splits impurities to `ntasks` chunks
-        - Computes Green's functions for assigned impurities
-        - Broadcasts results across `comm` group.
-        """
-        num_chunks = len(self) // self.ntasks
-        if len(self) % self.ntasks:
-            num_chunks += 1
-        for i in range(num_chunks):
-            index = self.rank + i * self.ntasks
-            if index < len(self):
-                self[index].solve()
-                self.bcast(self[index], "gf")
-                self.bcast(self[index], "espace")
-                self.bcast(self[index], "egs")
-        self.wait()
+        for impurity in chunk:
+            impurity.solve()
 
-    def bcast(self, gfimp: SingleGfimp, attr: str):
-        """Broadcast `gfimp` attribute across comm group.
-
-        Uses `dill` to (de)serialize the attribute.
-
-        Parameters
-        ----------
-        `gfimp` : `SingleGfimp`
-            The `gfimp` object.
-        `attr` : `str`
-            The attribute to broadcast.
-        """
-        setattr(
-            gfimp,
-            attr,
-            dill.loads(
-                self.comm.bcast(
-                    dill.dumps(getattr(gfimp, attr)),
-                    self.rank,
-                )),
+        all_gfs = np.concatenate(
+            COMM.allgather([impurity.gf for impurity in chunk]),
+            axis=0,
         )
+
+        for impurity, gf in zip(self, all_gfs):
+            impurity.gf = gf
 
     def spin_symmetrize(self):
         for gf in self:
@@ -267,9 +232,19 @@ class Gfimp:
         nup = np.zeros(len(self))
         ndw = np.zeros(len(self))
         for i, gf in enumerate(self.gfimp):
-            nup[i], ndw[i] = map(lambda m: m[0], get_occupation(
-                gf.espace,gf.egs,self.beta,self.n))
-        return nup-ndw
+
+    def _get_chunk(self) -> list[SingleGfimp]:
+        """Return an MPI-RANK/SIZE-dependent chunk of impurities.
+
+        Returns
+        -------
+        `list[SingleGfimp]`
+            A chunk of impurities.
+        """
+        chunk_size = len(self) // SIZE
+        start = RANK * chunk_size
+        end = start + chunk_size if RANK < SIZE - 1 else len(self)
+        return self[start:end]
 
     def __getitem__(self, i: int) -> SingleGfimp:
         return self.gfimp[i]

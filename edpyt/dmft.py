@@ -9,6 +9,7 @@ from edpyt.espace import adjust_neigsector, build_espace, screen_espace
 from edpyt.fit_cg import _delta, fit_hybrid, get_initial_bath
 from edpyt.gf_lanczos import build_gf_lanczos
 from edpyt.integrate_gf import integrate_gf
+from edpyt.pprint import pprint
 
 
 def adjust_mu(gf, occupancy_goal, bracket=(-20.0, 20)):
@@ -505,21 +506,29 @@ class DMFT:
         return eps
 
     def __call__(self, delta):
-        print(f"Iteration : {self.it:2}")
+
+        pprint(f"Iteration : {self.it:2}")
+
         self.delta = delta
         non_causal = delta.imag > 0  # ensures that the imaginary part is negative
         delta[non_causal].imag = -1e-20
         occp, delta_new = self.step(delta)
-        print(
-            f"Occupation : {occp:.5f} Chemical potential : {self.gfloc.mu:.5f}",
-            end=" ")
         eps = np.linalg.norm(delta_new - delta)
-        print(f"Error : {eps:.5f}")
+
+        message = " | ".join([
+            f"Occupation : {occp:.5f}",
+            f"Chemical potential : {self.gfloc.mu:.5f}",
+            f"Error : {eps:.5f}",
+        ])
+        pprint(message)
+
         if eps < self.tol:
             raise Converged("Converged!")
+
         self.it += 1
         if self.it >= self.max_iter:
             raise FailedToConverge("Failed to converge!")
+
         return delta_new
 
     def solve_with_broyden_mixing(self,
@@ -554,6 +563,7 @@ class DMFT:
         the quantity being mixed is the hybridisation function
 
         """
+
         try:
             if mixing_method == "linear":
                 self.solve_with_linear_mixing(delta, **kwargs)
@@ -562,6 +572,6 @@ class DMFT:
         except Converged:
             pass
         except FailedToConverge as err:
-            print(err)
+            pprint(err)
         # finally:
         #     np.save("data_DELTA_DMFT.npy", self.delta)
