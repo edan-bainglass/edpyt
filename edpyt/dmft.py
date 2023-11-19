@@ -133,12 +133,17 @@ class Gfimp:
         # Delta(z)  =                 -------
         #                /__k = 0      z - ek
         self.Delta.fit(delta)
-        self.H[1:, 0] = self.H[0, 1:] = self.Delta.vk
-        self.H.flat[(self.n + 1)::(self.n + 1)] = self.Delta.ek
+        self.update_H_vk_ek()
 
     def update(self, mu):
         """Update chemical potential."""
         self.H[0, 0] = -mu
+
+    # TODO rename this to whatever it actually does
+    def update_H_vk_ek(self) -> None:
+        """TBD."""
+        self.H[1:, 0] = self.H[0, 1:] = self.Delta.vk
+        self.H.flat[(self.n + 1)::(self.n + 1)] = self.Delta.ek
 
     def fit_update(self, Delta, mu):
         """Update impurity model."""
