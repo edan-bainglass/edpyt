@@ -40,7 +40,7 @@ requires = {
         "cython",
         "mpmath",
         "numpy >= " + "1.19" + ", < 1.22",
-        "scipy >= " + "1.6",
+        "scipy ~= " + "1.6.0",
         "numba >= " + "0.51",
         "ase",
     ]}
