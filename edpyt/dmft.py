@@ -11,19 +11,6 @@ from edpyt.gf_lanczos import build_gf_lanczos
 from edpyt.integrate_gf import integrate_gf
 
 
-def adjust_mu(gf, occupancy_goal, bracket=(-20.0, 20)):
-    """Get the chemical potential to obtain the occupancy goal.
-
-    NOTE : The gf is supposed to have the general form
-    (z+mu-Delta(z)-Sigma(z))^-1. Here, `distance` returns
-    the change in mu required to satisfy the occupancy goal.
-    """
-    # distance = lambda mu: np.sum(gf.integrate(mu)-occupancy_goal)
-    distance = lambda mu: gf.integrate(mu).sum() - occupancy_goal.sum()
-    return root_scalar(distance, bracket=bracket,
-                       method="brentq").root  # + gf.mu
-
-
 class Converged(Exception):
 
     def __init__(self, message):
@@ -408,31 +395,6 @@ class Gfhilbert(Gfloc):
         return g0
 
 
-def dmft_step(delta, gfimp, gfloc):
-    """Perform a DMFT self-consistency step."""
-    gfimp.fit(delta)  # at matsubara frequencies
-    gfimp.update(gfloc.mu - gfloc.ed)
-    gfimp.solve()
-    gfloc.set_local(gfimp.Sigma)
-
-
-def dmft_step_adjust(delta, gfimp, gfloc, occupancy_goal):
-    """Perform a DMFT self-consistency step and adjust chemical potential to
-    target occupation (for both local and impurity green's functions."""
-    dmft_step(delta, gfimp, gfloc)
-    mu = adjust_mu(gfloc, occupancy_goal)
-    gfloc.update(mu)
-
-
-def dmft_step_magnetic(delta, gfimp, gfloc, sign, field):
-    gfimp.up.fit(delta)
-    gfimp.spin_symmetrize()
-    gfimp.up.update(gfloc.mu + sign * field - gfloc.ed)
-    gfimp.dw.update(gfloc.mu - sign * field - gfloc.ed)
-    gfimp.solve()
-    gfloc.set_local(gfimp.Sigma)
-
-
 class DMFT:
     """Base class for DMFT self-consistent loop.
 
@@ -472,7 +434,7 @@ class DMFT:
         wn = (2 * np.arange(gfimp.nmats) + 1) * np.pi / gfimp.beta
         self.z = 1.0j * wn
         self.delta = None
-        self.adjust_mu = adjust_mu
+        self.to_adjust_mu = adjust_mu
         self.weights = wn**-alpha
 
     def initialize(self, U, Sigma, mu=None):
@@ -489,16 +451,49 @@ class DMFT:
         dmft_step_magnetic(delta, self.gfimp, self.gfloc, sign, field)
         return self.gfloc.Delta(self.z)
 
-    def step(self, delta):
-        if self.adjust_mu:
-            dmft_step_adjust(delta, self.gfimp, self.gfloc,
-                             self.occupancy_goal)
+    def step(self):
+        if self.to_adjust_mu:
+            self.dmft_step_adjust()
             occp = self.gfloc.integrate(self.gfloc.mu)
         else:
-            dmft_step(delta, self.gfimp, self.gfloc)
+            self.dmft_step()
             occp = self.occupancy_goal
         delta_new = self.gfloc.Delta(self.z)
         return np.sum(occp), delta_new
+
+    def dmft_step(self):
+        """Perform a DMFT self-consistency step."""
+        self.gfimp.fit(self.delta)  # at matsubara frequencies
+        self.gfimp.update(self.gfloc.mu - self.gfloc.ed)
+        self.gfimp.solve()
+        self.gfloc.set_local(self.gfimp.Sigma)
+
+    def dmft_step_adjust(self):
+        """Perform a DMFT self-consistency step and adjust chemical potential to
+        target occupation (for both local and impurity green's functions."""
+        self.dmft_step()
+        mu = self.adjust_mu(self.gfloc, self.occupancy_goal)
+        self.gfloc.update(mu)
+
+    def dmft_step_magnetic(self, delta, gfimp, gfloc, sign, field):
+        gfimp.up.fit(delta)
+        gfimp.spin_symmetrize()
+        gfimp.up.update(gfloc.mu + sign * field - gfloc.ed)
+        gfimp.dw.update(gfloc.mu - sign * field - gfloc.ed)
+        gfimp.solve()
+        gfloc.set_local(gfimp.Sigma)
+
+    def adjust_mu(self, gf, occupancy_goal, bracket=(-20.0, 20)):
+        """Get the chemical potential to obtain the occupancy goal.
+
+        NOTE : The gf is supposed to have the general form
+        (z+mu-Delta(z)-Sigma(z))^-1. Here, `distance` returns
+        the change in mu required to satisfy the occupancy goal.
+        """
+        # distance = lambda mu: np.sum(gf.integrate(mu)-occupancy_goal)
+        distance = lambda mu: gf.integrate(mu).sum() - occupancy_goal.sum()
+        return root_scalar(distance, bracket=bracket,
+                           method="brentq").root  # + gf.mu
 
     def distance(self, delta):
         eps = self.weights * (self(delta) - delta)
@@ -506,20 +501,27 @@ class DMFT:
 
     def __call__(self, delta):
         print(f"Iteration : {self.it:2}")
+
         self.delta = delta
         non_causal = delta.imag > 0  # ensures that the imaginary part is negative
         delta[non_causal].imag = -1e-20
         occp, delta_new = self.step(delta)
-        print(
-            f"Occupation : {occp:.5f} Chemical potential : {self.gfloc.mu:.5f}",
-            end=" ")
         eps = np.linalg.norm(delta_new - delta)
-        print(f"Error : {eps:.5f}")
+
+        message = " | ".join([
+            f"Occupation : {occp:.5f}",
+            f"Chemical potential : {self.gfloc.mu:.5f}",
+            f"Error : {eps:.5f}",
+        ])
+        print(message)
+
         if eps < self.tol:
             raise Converged("Converged!")
+
         self.it += 1
         if self.it >= self.max_iter:
             raise FailedToConverge("Failed to converge!")
+
         return delta_new
 
     def solve_with_broyden_mixing(self,
