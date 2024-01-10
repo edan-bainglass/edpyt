@@ -10,7 +10,6 @@ from ase.io import read
 from edpyt.dmft import DMFT, Gfimp
 from edpyt.nano_dmft import Gfimp as nanoGfimp
 from edpyt.nano_dmft import Gfloc
-from edpyt.pprint import pprint
 from scipy.interpolate import interp1d
 
 p = Path('../scatt')
@@ -75,6 +74,6 @@ tot_iter = 1
 
 while dmft.it < tot_iter:
     if dmft.it > 0:
-        pprint("Restarting")
+        print("Restarting")
     dmft.solve(delta, verbose=False)
     dmft.max_iter += dmft.max_iter
