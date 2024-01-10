@@ -19,9 +19,7 @@ atoms = read(p / 'scatt.xyz')
 z = atoms.positions[:, 2]
 atoms = atoms[np.where((z > (z.min() + 1)) & (atoms.symbols == 'C'))[0]]
 
-size = 22
-
-occupancy_goal = np.load(p / 'data_OCCPS.npy')[:size]
+occupancy_goal = np.load(p / 'data_OCCPS.npy')
 
 L = occupancy_goal.size
 
@@ -32,7 +30,7 @@ beta = np.pi / (z_mats[0].imag)
 hyb_mats = np.fromfile(
     p / 'data_HYBRID_MATS.bin',
     complex,
-).reshape(z_mats.size, 22, 22)[:, :size, :size]
+).reshape(z_mats.size, L, L)
 
 _HybMats = interp1d(z_mats.imag,
                     hyb_mats,
@@ -41,7 +39,7 @@ _HybMats = interp1d(z_mats.imag,
                     fill_value=0.)
 HybMats = lambda z: _HybMats(z.imag)
 
-H = np.load(p / 'data_HAMILTON.npy').real[:size, :size]
+H = np.load(p / 'data_HAMILTON.npy').real
 S = np.eye(L)
 
 idx_neq = np.arange(L)
