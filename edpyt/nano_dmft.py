@@ -156,9 +156,20 @@ class Gfimp:
     def __init__(self, gfimp) -> None:
         self.gfimp = gfimp
 
-    def __getattr__(self, name):
-        """Default is to return attribute of first impurity."""
-        return getattr(self.gfimp[0], name)
+    @property
+    def nmats(self):
+        if hasattr(self, "gfimp") and self.gfimp:
+            return self.gfimp[0].nmats
+
+    @property
+    def beta(self):
+        if hasattr(self, "gfimp") and self.gfimp:
+            return self.gfimp[0].beta
+
+    @property
+    def x(self):
+        if hasattr(self, "gfimp") and self.gfimp:
+            return self.gfimp[0].x
 
     def reset_bath(self):
         for gf in self:
