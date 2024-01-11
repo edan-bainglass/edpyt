@@ -62,8 +62,8 @@ occupancy_goal = occupancy_goal[gfloc.idx_neq]
 dmft = DMFT(gfimp,
             gfloc,
             occupancy_goal,
-            max_iter=1000,
-            tol=9e-1,
+            max_iter=10,
+            tol=1e-1,
             adjust_mu=False,
             alpha=0.)
 
@@ -73,28 +73,34 @@ new_mu = mu + dmu
 Sigma = lambda z: np.zeros((nimp, z.size), complex)
 delta = dmft.initialize(V.diagonal().mean(), Sigma, mu=new_mu)
 
-tot_iter = 100
+tot_iter = 1000
+
+if tot_iter < dmft.max_iter:
+    print("tot_iter should be greater than max_iter")
 
 while dmft.it < tot_iter:
     if dmft.it > 0:
         print("Restarting")
-    dmft.solve(delta, verbose=False)
+    outcome = dmft.solve(delta, verbose=False)
+    delta = dmft.delta 
+    if outcome == "converged":
+        print(f"Converged in {dmft.it} steps")
+        break
+    print(outcome)
     dmft.max_iter += dmft.max_iter
 
 _Sigma = lambda z: -DC.diagonal()[:, None] - gfloc.mu + gfloc.Sigma(z)[idx_inv]
 
-
-def save_sigma(sigma_diag):
+def save_sigma(sigma_diag,dmu):
     L, ne = sigma_diag.shape
     sigma = np.zeros((ne, L, L), complex)
 
     def save(spin):
         for diag, mat in zip(sigma_diag.T, sigma):
             mat.flat[::(L + 1)] = diag
-        np.save('data_SIGMA_DMFT.npy', sigma)
+        np.save(f'data_SIGMA_DMFT_DMU_{dmu:1.4f}.npy', sigma)
 
     for spin in range(1):
         save(spin)
 
-
-save_sigma(_Sigma(z_ret))
+save_sigma(_Sigma(z_ret),dmu)

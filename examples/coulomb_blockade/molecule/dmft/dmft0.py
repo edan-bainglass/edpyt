@@ -1,16 +1,16 @@
 #!/usr/bin/env python
 # coding: utf-8
-
 from __future__ import annotations
 
 from pathlib import Path
 
 import numpy as np
 from ase.io import read
+from scipy.interpolate import interp1d
+
 from edpyt.dmft import DMFT, Gfimp
 from edpyt.nano_dmft import Gfimp as nanoGfimp
 from edpyt.nano_dmft import Gfloc
-from scipy.interpolate import interp1d
 
 p = Path('../scatt')
 
@@ -62,20 +62,28 @@ occupancy_goal = occupancy_goal[gfloc.idx_neq]
 dmft = DMFT(gfimp,
             gfloc,
             occupancy_goal,
-            max_iter=1,
-            tol=9e-1,
+            max_iter=5,
+            tol=1e-1,
             adjust_mu=True,
             alpha=0.)
 
 Sigma = lambda z: np.zeros((nimp, z.size), complex)
 delta = dmft.initialize(V.diagonal().mean(), Sigma, mu=0.)
 
-tot_iter = 1
+tot_iter = 20
+
+if tot_iter < dmft.max_iter:
+    print("tot_iter should be greater than max_iter")
 
 while dmft.it < tot_iter:
     if dmft.it > 0:
         print("Restarting")
-    dmft.solve(delta, verbose=False)
+    outcome = dmft.solve(delta, verbose=False)
+    delta = dmft.delta
+    if outcome == "converged":
+        print(f"Converged in {dmft.it} steps")
+        break
+    print(outcome)
     dmft.max_iter += dmft.max_iter
 
 np.save('data_DELTA_DMFT.npy', dmft.delta)
