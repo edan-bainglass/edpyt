@@ -551,7 +551,7 @@ class DMFT:
                      alpha=alpha,
                      callback=callback)
 
-    def solve(self, delta, mixing_method="broyden", **kwargs):
+    def solve(self, delta, mixing_method="broyden", **kwargs) -> str:
         """'linear' or 'broyden' mixing
         the quantity being mixed is the hybridisation function
 
@@ -562,8 +562,6 @@ class DMFT:
             elif mixing_method == "broyden":
                 self.solve_with_broyden_mixing(delta, **kwargs)
         except Converged:
-            pass
+            return "converged"
         except FailedToConverge as err:
-            print(err)
-        # finally:
-        #     np.save("data_DELTA_DMFT.npy", self.delta)
+            return str(err)
