@@ -448,7 +448,7 @@ class DMFT:
 
     def initialize_magnetic(self, U, Sigma, sign, field, mu=None):
         delta = self.initialize(U, Sigma, mu)
-        dmft_step_magnetic(delta, self.gfimp, self.gfloc, sign, field)
+        self.dmft_step_magnetic(delta, self.gfimp, self.gfloc, sign, field)
         return self.gfloc.Delta(self.z)
 
     def step(self):
@@ -500,12 +500,12 @@ class DMFT:
         return eps
 
     def __call__(self, delta):
-        print(f"Iteration : {self.it:2}")
+        print(f"Iteration : {self.it:2}",flush=True)
 
         self.delta = delta
         non_causal = delta.imag > 0  # ensures that the imaginary part is negative
         delta[non_causal].imag = -1e-20
-        occp, delta_new = self.step(delta)
+        occp, delta_new = self.step()
         eps = np.linalg.norm(delta_new - delta)
 
         message = " | ".join([
@@ -513,7 +513,7 @@ class DMFT:
             f"Chemical potential : {self.gfloc.mu:.5f}",
             f"Error : {eps:.5f}",
         ])
-        print(message)
+        print(message,flush=True)
 
         if eps < self.tol:
             raise Converged("Converged!")
