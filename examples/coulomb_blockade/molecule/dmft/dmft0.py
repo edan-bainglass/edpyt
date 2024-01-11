@@ -23,7 +23,7 @@ occupancy_goal = np.load(p / 'data_OCCPS.npy')
 L = occupancy_goal.size
 
 z_mats = np.load(p / 'data_ENERGIES_MATS.npy')
-
+z_ret = np.load(p / 'data_ENERGIES.npy')
 beta = np.pi / (z_mats[0].imag)
 
 hyb_mats = np.fromfile(
@@ -77,3 +77,24 @@ while dmft.it < tot_iter:
         print("Restarting")
     dmft.solve(delta, verbose=False)
     dmft.max_iter += dmft.max_iter
+
+np.save('data_DELTA_DMFT.npy', dmft.delta)
+open('mu.txt', 'w').write(str(gfloc.mu))
+
+_Sigma = lambda z: -DC.diagonal()[:, None] - gfloc.mu + gfloc.Sigma(z)[idx_inv]
+
+
+def save_sigma(sigma_diag):
+    L, ne = sigma_diag.shape
+    sigma = np.zeros((ne, L, L), complex)
+
+    def save(spin):
+        for diag, mat in zip(sigma_diag.T, sigma):
+            mat.flat[::(L + 1)] = diag
+        np.save('data_SIGMA_DMFT.npy', sigma)
+
+    for spin in range(1):
+        save(spin)
+
+
+save_sigma(_Sigma(z_ret))
