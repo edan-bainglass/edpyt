@@ -52,6 +52,8 @@ gfloc = Gfloc(H - DC, S, HybMats, idx_neq, idx_inv)
 nimp = gfloc.idx_neq.size
 gfimp: list[Gfimp] = []
 n = 4
+max_iter = 10
+tot_iter = 1000
 
 for i in range(nimp):
     gfimp.append(Gfimp(n, z_mats.size, V[i, i], beta))
@@ -62,7 +64,7 @@ occupancy_goal = occupancy_goal[gfloc.idx_neq]
 dmft = DMFT(gfimp,
             gfloc,
             occupancy_goal,
-            max_iter=5,
+            max_iter=max_iter,
             tol=1e-1,
             adjust_mu=True,
             alpha=0.)
@@ -70,9 +72,8 @@ dmft = DMFT(gfimp,
 Sigma = lambda z: np.zeros((nimp, z.size), complex)
 delta = dmft.initialize(V.diagonal().mean(), Sigma, mu=0.)
 
-tot_iter = 20
 
-if tot_iter < dmft.max_iter:
+if tot_iter < max_iter:
     print("tot_iter should be greater than max_iter")
 
 while dmft.it < tot_iter:
@@ -84,7 +85,7 @@ while dmft.it < tot_iter:
         print(f"Converged in {dmft.it} steps")
         break
     print(outcome)
-    dmft.max_iter += dmft.max_iter
+    dmft.max_iter += max_iter
 
 np.save('data_DELTA_DMFT.npy', dmft.delta)
 open('mu.txt', 'w').write(str(gfloc.mu))
