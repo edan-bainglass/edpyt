@@ -506,12 +506,12 @@ class DMFT:
         non_causal = delta.imag > 0  # ensures that the imaginary part is negative
         delta[non_causal].imag = -1e-20
         occp, delta_new = self.step()
-        eps = np.linalg.norm(delta_new - delta)
+        eps = np.linalg.norm(delta_new - delta)/ np.linalg.norm(delta)
 
         message = " | ".join([
             f"Occupation : {occp:.5f}",
             f"Chemical potential : {self.gfloc.mu:.5f}",
-            f"Error : {eps:.5f}",
+            f"Relative Error : {eps:.5f}",
         ])
         print(message,flush=True)
 
