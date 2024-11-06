@@ -5,6 +5,7 @@ from scipy.optimize import broyden1, linearmixing, root_scalar
 
 # from edpyt_backend.fit_wrap import fit_hybrid
 from edpyt.espace import adjust_neigsector, build_espace, screen_espace
+
 # from edpyt.fit import Delta, set_initial_bath
 from edpyt.fit_cg import _delta, fit_hybrid, get_initial_bath
 from edpyt.gf_lanczos import build_gf_lanczos
@@ -12,19 +13,16 @@ from edpyt.integrate_gf import integrate_gf
 
 
 class Converged(Exception):
-
     def __init__(self, message):
         self.message = message
 
 
 class FailedToConverge(Exception):
-
     def __init__(self, message):
         self.message = message
 
 
 class Delta:
-
     def __init__(self, nbath, nmats, beta) -> None:
         self.nbath = nbath
         self.nmats = nmats
@@ -37,11 +35,11 @@ class Delta:
 
     @property
     def ek(self):
-        return self.x[:self.nbath]
+        return self.x[: self.nbath]
 
     @property
     def vk(self):
-        return self.x[self.nbath:]
+        return self.x[self.nbath :]
 
     def fit(self, delta):
         fit_hybrid(self.x, self.nmats, delta, self.beta)
@@ -70,14 +68,16 @@ class Gfimp:
     #   |  v1     e1     |
     #   |   .        .   |
     #   |   .          . |
-    def __init__(self,
-                 n,
-                 nmats=3000,
-                 U=3.0,
-                 beta=1e6,
-                 neig=None,
-                 adjust_neig=False,
-                 spin=0):
+    def __init__(
+        self,
+        n,
+        nmats=3000,
+        U=3.0,
+        beta=1e6,
+        neig=None,
+        adjust_neig=False,
+        spin=0,
+    ):
         self.n = n
         self.Delta = Delta(n - 1, nmats, beta)
         self.spin = spin
@@ -120,7 +120,7 @@ class Gfimp:
         #                /__k = 0      z - ek
         self.Delta.fit(delta)
         self.H[1:, 0] = self.H[0, 1:] = self.Delta.vk
-        self.H.flat[(self.n + 1)::(self.n + 1)] = self.Delta.ek
+        self.H.flat[(self.n + 1) :: (self.n + 1)] = self.Delta.ek
 
     def update(self, mu):
         """Update chemical potential."""
@@ -153,8 +153,7 @@ class Gfimp:
         #                  -1            -1
         #  Sigma(z)    =  g (z)     -   g (z)
         #                  0
-        return self.free(z, inverse=True) - np.reciprocal(
-            self.gf(z.real, z.imag))
+        return self.free(z, inverse=True) - np.reciprocal(self.gf(z.real, z.imag))
 
     def solve(self):
         """Solve impurity model and set interacting green's function."""
@@ -163,13 +162,15 @@ class Gfimp:
         screen_espace(espace, egs)  # , beta=self.beta)
         if self.adjust_neig:
             adjust_neigsector(espace, self.neig, self.n)
-        self.gf = build_gf_lanczos(H,
-                                   V,
-                                   espace,
-                                   self.beta,
-                                   egs,
-                                   repr="sp",
-                                   ispin=self.spin)
+        self.gf = build_gf_lanczos(
+            H,
+            V,
+            espace,
+            self.beta,
+            egs,
+            repr="sp",
+            ispin=self.spin,
+        )
         self.espace = espace
         self.egs = egs
 
@@ -196,13 +197,15 @@ class SpinGfimp:
     NOTE: Arrays of this class have the general shape = (2, z.size)
     """
 
-    def __init__(self,
-                 n,
-                 nmats=3000,
-                 U=3.0,
-                 beta=1e6,
-                 neig=None,
-                 adjust_neig=False):
+    def __init__(
+        self,
+        n,
+        nmats=3000,
+        U=3.0,
+        beta=1e6,
+        neig=None,
+        adjust_neig=False,
+    ):
         self.H = np.zeros((2, n, n))
         self.gfimp = [None, None]
         # Build gfimp's for each spin and make them point to self.H[spin].
@@ -260,13 +263,15 @@ class SpinGfimp:
         if self.adjust_neig:
             adjust_neigsector(espace, self.neig, self.n)
         for gf in self:
-            gf.gf = build_gf_lanczos(H,
-                                     V,
-                                     espace,
-                                     self.beta,
-                                     egs,
-                                     repr="sp",
-                                     ispin=gf.spin)
+            gf.gf = build_gf_lanczos(
+                H,
+                V,
+                espace,
+                self.beta,
+                egs,
+                repr="sp",
+                ispin=gf.spin,
+            )
         self.espace = espace
         self.egs = egs
 
@@ -288,8 +293,7 @@ class SpinGfimp:
 
 
 class Gfloc:
-    """Parent local green's function.
-    """
+    """Parent local green's function."""
 
     def update(self, mu):
         """Update chemical potential."""
@@ -344,8 +348,7 @@ ht = lambda z: _ht(z.real + 1.0j * (z.imag if z.imag > 0.0 else eps))
 
 
 class Gfhybrid(Gfloc):
-    """Local green's function defined by hybridization.
-    """
+    """Local green's function defined by hybridization."""
 
     #          __
     #         |                  1
@@ -370,8 +373,7 @@ class Gfhybrid(Gfloc):
 
 
 class Gfhilbert(Gfloc):
-    """Local green's function defined by hilbert transform.
-    """
+    """Local green's function defined by hilbert transform."""
 
     #          __
     #         |            dos(e)
@@ -424,6 +426,8 @@ class DMFT:
         tol: float = 1e-3,
         adjust_mu: bool = False,
         alpha: float = 0.0,
+        store_last_n: int = 5,  # Number of last iterations to store
+        store_iterations: bool = False,  # Flag to enable/disable storing of last n iterations
     ):
         self.gfimp = gfimp
         self.gfloc = gfloc
@@ -436,6 +440,14 @@ class DMFT:
         self.delta = None
         self.to_adjust_mu = adjust_mu
         self.weights = wn**-alpha
+        self.store_last_n = store_last_n
+        self.store_iterations = store_iterations  # Enable/disable storage
+
+        # Initialize storage lists, only if storage is enabled
+        if self.store_iterations:
+            self.deltas = []
+            self.sigmas = []
+            self.gflocs = []
 
     def initialize(self, U, Sigma, mu=None):
         if mu is None:
@@ -463,14 +475,13 @@ class DMFT:
 
     def dmft_step(self):
         """Perform a DMFT self-consistency step."""
-        self.gfimp.fit(self.delta)  # at matsubara frequencies
+        self.gfimp.fit(self.delta)  # at Matsubara frequencies
         self.gfimp.update(self.gfloc.mu - self.gfloc.ed)
         self.gfimp.solve()
         self.gfloc.set_local(self.gfimp.Sigma)
 
     def dmft_step_adjust(self):
-        """Perform a DMFT self-consistency step and adjust chemical potential to
-        target occupation (for both local and impurity green's functions."""
+        """Perform a DMFT step and adjust chemical potential to target occupation."""
         self.dmft_step()
         mu = self.adjust_mu(self.gfloc, self.occupancy_goal)
         self.gfloc.update(mu)
@@ -484,36 +495,46 @@ class DMFT:
         gfloc.set_local(gfimp.Sigma)
 
     def adjust_mu(self, gf, occupancy_goal, bracket=(-20.0, 20)):
-        """Get the chemical potential to obtain the occupancy goal.
-
-        NOTE : The gf is supposed to have the general form
-        (z+mu-Delta(z)-Sigma(z))^-1. Here, `distance` returns
-        the change in mu required to satisfy the occupancy goal.
-        """
-        # distance = lambda mu: np.sum(gf.integrate(mu)-occupancy_goal)
+        """Adjust chemical potential to achieve occupancy goal."""
         distance = lambda mu: gf.integrate(mu).sum() - occupancy_goal.sum()
-        return root_scalar(distance, bracket=bracket,
-                           method="brentq").root  # + gf.mu
+        return root_scalar(distance, bracket=bracket, method="brentq").root
 
     def distance(self, delta):
         eps = self.weights * (self(delta) - delta)
         return eps
 
     def __call__(self, delta):
-        print(f"Iteration : {self.it:2}",flush=True)
+        print(f"Iteration : {self.it:2}", flush=True)
 
         self.delta = delta
-        non_causal = delta.imag > 0  # ensures that the imaginary part is negative
+        non_causal = delta.imag > 0  # Ensures that the imaginary part is negative
         delta[non_causal].imag = -1e-20
         occp, delta_new = self.step()
-        eps = np.linalg.norm(delta_new - delta)/ np.linalg.norm(delta)
+        eps = np.linalg.norm(delta_new - delta) / np.linalg.norm(delta)
 
-        message = " | ".join([
-            f"Occupation : {occp:.5f}",
-            f"Chemical potential : {self.gfloc.mu:.5f}",
-            f"Relative Error : {eps:.5f}",
-        ])
-        print(message,flush=True)
+        message = " | ".join(
+            [
+                f"Occupation : {occp:.5f}",
+                f"Chemical potential : {self.gfloc.mu:.5f}",
+                f"Relative Error : {eps:.5f}",
+            ]
+        )
+        print(message, flush=True)
+
+        # Conditionally store delta, Sigma, and gfloc if storage is enabled
+        if self.store_iterations:
+            if len(self.deltas) >= self.store_last_n:
+                self.deltas.pop(0)
+                self.sigmas.pop(0)
+                self.gflocs.pop(0)
+
+            self.deltas.append(delta.copy())
+            self.sigmas.append(
+                self.gfimp.Sigma(self.z).copy()
+            )  # Assuming Sigma is updated within gfimp
+            self.gflocs.append(
+                self.gfloc(self.z).copy()
+            )  # Assuming gfloc can be deep-copied
 
         if eps < self.tol:
             raise Converged("Converged!")
@@ -524,11 +545,7 @@ class DMFT:
 
         return delta_new
 
-    def solve_with_broyden_mixing(self,
-                                  delta,
-                                  alpha=0.5,
-                                  verbose=True,
-                                  callback=None):
+    def solve_with_broyden_mixing(self, delta, alpha=0.5, verbose=True, callback=None):
         broyden1(
             self.distance,
             delta,
@@ -538,24 +555,13 @@ class DMFT:
             verbose=verbose,
             f_tol=1e-99,
             callback=callback,
-        )  # Loop forever (small f_tol!)
+        )
 
-    def solve_with_linear_mixing(self,
-                                 delta,
-                                 iter=60,
-                                 alpha=0.2,
-                                 callback=None):
-        linearmixing(self.distance,
-                     delta,
-                     iter=iter,
-                     alpha=alpha,
-                     callback=callback)
+    def solve_with_linear_mixing(self, delta, iter=60, alpha=0.2, callback=None):
+        linearmixing(self.distance, delta, iter=iter, alpha=alpha, callback=callback)
 
     def solve(self, delta, mixing_method="broyden", **kwargs) -> str:
-        """'linear' or 'broyden' mixing
-        the quantity being mixed is the hybridisation function
-
-        """
+        """'linear' or 'broyden' mixing for hybridization function."""
         try:
             if mixing_method == "linear":
                 self.solve_with_linear_mixing(delta, **kwargs)
